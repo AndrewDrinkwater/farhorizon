@@ -1,0 +1,20 @@
+# Godot 4+ editor cache and imported files
+.godot/
+.import/
+
+# Exported builds
+export.cfg
+export_presets.cfg
+build/
+*.exe
+*.pck
+*.zip
+
+# Generated translations (compiled from localization/*.csv on import)
+*.translation
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.tmp
+*~

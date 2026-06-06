@@ -4,6 +4,37 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — Session 1: Project scaffold (α0.1 build-order step 1)
+
+First code. Stood up the Godot project skeleton against the plan — no gameplay
+yet, just the foundation everything hangs off.
+
+- **Godot 4.6** (latest stable, Forward+), GDScript, 1920×1080. `project.godot`
+  with the six autoloads registered, named input actions (`sim_pause`,
+  `sim_speed_up/down`, `toggle_debug`), and the GUT plugin enabled.
+- **Six autoloads** created: `EventBus` (all signals declared, incl. order +
+  clock), `GameState`/`SimClock`/`SaveManager`/`TypeRegistry` as typed stubs
+  with public surfaces + TODOs pointing at their build-order step, and
+  `ConfigManager` implemented (settings in `user://settings.cfg`, separate from
+  saves).
+- **`GameVersion`** constants (`GAME_VERSION` 0.1.0, `SAVE_SCHEMA_VERSION` 1).
+- **Localisation** string table `localization/strings.csv` (Helm/flight keys);
+  `tr()` ready. One manual editor step to register the locale (SETUP.md).
+- **GUT 9.6.0** vendored into `addons/gut`; `tests/unit/test_smoke.gd` asserts
+  the autoloads load and defaults hold; `.gutconfig.json` added.
+- Repo hygiene: `.gitignore` (`.godot/`, `*.translation`, etc.), `.gitattributes`
+  (LF), `icon.svg`, `README.md`, `SETUP.md`, full `src/` tree with `.gitkeep`.
+- Runnable placeholder scene (`src/ui/shell/main.tscn`) so the project boots.
+
+Couldn't run a live compile (no Godot in this environment); verified structure,
+GUT's `GutTest`/headless runner, and plugin manifest by hand. **First open in
+Godot 4.6 is the real check** — see SETUP.md.
+
+**Next:** build-order step 2 — implement SimClock ticks + EventBus, window-focus
+auto-pause, and the debug overlay.
+
+---
+
 ## 2026-06-06 — Session 0c: Consoles + the Helm console
 
 Defined the first console and, with it, the UI's organizing model.
