@@ -12,6 +12,7 @@ func _ready() -> void:
 	# unbind(1) drops each signal's payload — we re-read state in _refresh().
 	EventBus.sim_tick.connect(_refresh.unbind(1))
 	EventBus.sim_speed_changed.connect(_refresh.unbind(1))
+	EventBus.game_state_loaded.connect(_refresh)
 	_refresh()
 
 

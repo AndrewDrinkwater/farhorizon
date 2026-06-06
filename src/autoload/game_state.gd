@@ -1,29 +1,37 @@
 extends Node
 ## GameState — the single owned runtime state tree (ADR 0002).
 ##
-## This is the ONLY autoload that holds saved run state. Everything that is
-## "true about the current run" lives here; SaveManager serializes this whole
-## tree (ADR 0008). Authored content is referenced by id, never embedded.
-##
-## SCAFFOLD STUB — fields and serialization are filled in build-order step 3.
-## See docs/ALPHA-0.1-SPEC.md.
+## The ONLY autoload that holds saved run state. Everything "true about the
+## current run" lives here as typed plain objects (src/core/state); SaveManager
+## serializes this whole tree (ADR 0008). Authored content is referenced by id,
+## never embedded. Systems read these fields and mutate them through defined
+## paths; the UI binds here for reads and emits intents to change them.
 
-## Bumped to match the save schema this build writes.
-var schema_version: int = GameVersion.SAVE_SCHEMA_VERSION
-
-# TODO(step 3): real state objects — clock, ship (incl. current_order), system.
-# var clock: ClockState
-# var ship: ShipState
-# var system: SystemState
+var clock: ClockState = ClockState.new()
+var ship: ShipState = ShipState.new()
+var system: SystemState = SystemState.new()
 
 
+## Reset the tree to a fresh run (used by "new game" and as the load baseline).
+func new_game() -> void:
+	clock = ClockState.new()
+	ship = ShipState.new()
+	system = SystemState.new()
+
+
+## Serialize the whole tree to a plain Dictionary (SaveManager wraps it with the
+## version stamps — versioning is SaveManager's concern, not the state's).
 func to_dict() -> Dictionary:
-	# TODO(step 3): walk the tree into a plain Dictionary.
 	return {
-		"schema_version": schema_version,
+		"clock": clock.to_dict(),
+		"ship": ship.to_dict(),
+		"system": system.to_dict(),
 	}
 
 
-func from_dict(_data: Dictionary) -> void:
-	# TODO(step 3): rebuild the tree; forgiving about missing keys.
-	pass
+## Rebuild the tree from a Dictionary. Forgiving: missing branches/keys fall back
+## to defaults so older saves survive schema growth (ADR 0008).
+func from_dict(data: Dictionary) -> void:
+	clock = ClockState.from_dict(data.get("clock", {}))
+	ship = ShipState.from_dict(data.get("ship", {}))
+	system = SystemState.from_dict(data.get("system", {}))

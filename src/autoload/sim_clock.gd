@@ -6,10 +6,12 @@ extends Node
 ## with 0 = paused. Nothing else owns a sim-affecting timer — every ticking
 ## system subscribes to EventBus.sim_tick instead.
 ##
-## This node is a thin shell: the accumulation math lives in the pure, tested
-## ClockMath (src/core). Speed control is wired to the named input actions
-## (ADR 0011). The one allowed auto-pause is on OS window-focus loss, gated by
-## ConfigManager's pause_on_focus_loss (CONVENTIONS.md "Window focus").
+## This node is a thin shell. The accumulation math lives in the pure, tested
+## ClockMath (src/core); the *authoritative tick + speed* live in GameState.clock
+## (ADR 0002) so the save is just a serialized tree — SimClock reads/advances
+## them, it does not keep a divergent copy. Speed control is wired to the named
+## input actions (ADR 0011). The one allowed auto-pause is on OS window-focus
+## loss, gated by ConfigManager's pause_on_focus_loss (CONVENTIONS.md).
 
 ## Real seconds per tick at 1x speed (tuning constant, not logic).
 const SECONDS_PER_TICK: float = 2.0
@@ -17,8 +19,6 @@ const SECONDS_PER_TICK: float = 2.0
 ## Allowed speed multipliers exposed at the Helm/shell (0 = paused).
 const SPEEDS: Array[float] = [0.0, 1.0, 2.0, 4.0]
 
-var _tick: int = 0
-var _speed: float = 1.0
 var _math: ClockMath
 
 ## Speed to restore when un-pausing (manual toggle); always a running speed.
@@ -35,14 +35,15 @@ func _ready() -> void:
 	var default_speed: float = float(ConfigManager.get_setting("gameplay", "default_sim_speed"))
 	if default_speed > 0.0:
 		_last_running_speed = default_speed
-	_speed = default_speed
+	GameState.clock.speed = default_speed
+	EventBus.game_state_loaded.connect(_on_state_loaded)
 
 
 func _process(delta: float) -> void:
-	var ticks: int = _math.advance(delta, _speed)
+	var ticks: int = _math.advance(delta, GameState.clock.speed)
 	for _i: int in ticks:
-		_tick += 1
-		EventBus.sim_tick.emit(_tick)
+		GameState.clock.tick += 1
+		EventBus.sim_tick.emit(GameState.clock.tick)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -64,15 +65,15 @@ func _notification(what: int) -> void:
 # --- Public surface (read by UI, never mutated by it) ---
 
 func get_tick() -> int:
-	return _tick
+	return GameState.clock.tick
 
 
 func get_speed() -> float:
-	return _speed
+	return GameState.clock.speed
 
 
 func is_paused() -> bool:
-	return _speed <= 0.0
+	return GameState.clock.speed <= 0.0
 
 
 ## Fractional progress to the next tick (0..1) for interpolated rendering.
@@ -81,17 +82,17 @@ func get_tick_fraction() -> float:
 
 
 func set_speed(speed: float) -> void:
-	if is_equal_approx(speed, _speed):
+	if is_equal_approx(speed, GameState.clock.speed):
 		return
 	if speed > 0.0:
 		_last_running_speed = speed
-	_speed = speed
-	EventBus.sim_speed_changed.emit(_speed)
+	GameState.clock.speed = speed
+	EventBus.sim_speed_changed.emit(speed)
 
 
 ## Step up through SPEEDS (caps at the fastest).
 func speed_up() -> void:
-	var idx: int = SPEEDS.find(_speed)
+	var idx: int = SPEEDS.find(get_speed())
 	if idx == -1:
 		idx = SPEEDS.find(1.0)
 	set_speed(SPEEDS[mini(idx + 1, SPEEDS.size() - 1)])
@@ -99,7 +100,7 @@ func speed_up() -> void:
 
 ## Step down through SPEEDS (floors at paused).
 func speed_down() -> void:
-	var idx: int = SPEEDS.find(_speed)
+	var idx: int = SPEEDS.find(get_speed())
 	if idx == -1:
 		idx = SPEEDS.find(1.0)
 	set_speed(SPEEDS[maxi(idx - 1, 0)])
@@ -113,6 +114,17 @@ func toggle_pause() -> void:
 		set_speed(0.0)
 
 
+# --- Lifecycle ---
+
+## A load replaced GameState.clock; drop sub-tick progress and refresh listeners.
+func _on_state_loaded() -> void:
+	_math.reset()
+	_focus_auto_paused = false
+	if GameState.clock.speed > 0.0:
+		_last_running_speed = GameState.clock.speed
+	EventBus.sim_speed_changed.emit(GameState.clock.speed)
+
+
 # --- Window-focus auto-pause (the one allowed auto-pause; CONVENTIONS.md) ---
 
 func _on_focus_lost() -> void:
@@ -120,7 +132,7 @@ func _on_focus_lost() -> void:
 		return
 	if is_paused():
 		return  # nothing to do; leave the player's pause as-is
-	_speed_before_focus_loss = _speed
+	_speed_before_focus_loss = get_speed()
 	_focus_auto_paused = true
 	set_speed(0.0)
 
