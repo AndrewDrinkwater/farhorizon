@@ -14,6 +14,7 @@ var max_reaction_mass: float = 100.0  # tank capacity; refuel fills to this
 ## Where the ship is when not under way (ADR 0015). DEEP_SPACE at game start.
 var location: int = Travel.Location.DEEP_SPACE
 var location_body_id: String = ""  # body we're holding at / docked at ("" = none)
+var orbit_angle: float = 0.0  # angle on the holding ring while HOLDING (radians)
 ## The laid-in course (target state): {target_id, burn, engaged, origin}.
 var current_order: Dictionary = {}
 
@@ -27,6 +28,7 @@ func to_dict() -> Dictionary:
 		"max_reaction_mass": max_reaction_mass,
 		"location": location,
 		"location_body_id": location_body_id,
+		"orbit_angle": orbit_angle,
 		"current_order": current_order,
 	}
 
@@ -41,5 +43,6 @@ static func from_dict(data: Dictionary) -> ShipState:
 	s.max_reaction_mass = float(data.get("max_reaction_mass", s.max_reaction_mass))
 	s.location = int(data.get("location", s.location))
 	s.location_body_id = String(data.get("location_body_id", s.location_body_id))
+	s.orbit_angle = float(data.get("orbit_angle", s.orbit_angle))
 	s.current_order = data.get("current_order", s.current_order)
 	return s

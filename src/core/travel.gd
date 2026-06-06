@@ -8,6 +8,15 @@ extends RefCounted
 ## Where the ship is when not under way.
 enum Location { DEEP_SPACE, HOLDING, DOCKED }
 
+## Distance (wu) beyond a body's own radius at which ships hold/orbit. The
+## holding area is this ring, not the body centre — ships arrive onto it and
+## depart from it (so there's no diving through the body).
+const HOLDING_GAP: float = 26.0
+
+
+static func holding_radius(body_radius: float) -> float:
+	return body_radius + HOLDING_GAP
+
 const _LOCATION_KEYS: Dictionary = {
 	Location.DEEP_SPACE: "TRAVEL_DEEP_SPACE",
 	Location.HOLDING: "TRAVEL_HOLDING",

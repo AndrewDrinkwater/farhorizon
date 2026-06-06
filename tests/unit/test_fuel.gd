@@ -38,11 +38,12 @@ func _fly_to_holding(target_id: String, burn: int) -> void:
 
 func test_burn_spends_reaction_mass_matching_the_cost_model() -> void:
 	var verdant := _find("verdant")
-	var dist := Vector2.ZERO.distance_to(verdant.position)
-	var expected := FlightMath.rm_cost(dist, FlightMath.Burn.ECONOMY)
+	# The ship stops on the holding ring, so it travels to the ring, not the centre.
+	var travel := Vector2.ZERO.distance_to(verdant.position) - Travel.holding_radius(verdant.radius)
+	var expected := FlightMath.rm_cost(travel, FlightMath.Burn.ECONOMY)
 	_fly_to_holding("verdant", FlightMath.Burn.ECONOMY)
 	var spent := 100.0 - GameState.ship.reaction_mass
-	assert_almost_eq(spent, expected, 0.5, "total RM spent equals the course cost")
+	assert_almost_eq(spent, expected, 0.5, "total RM spent equals the travelled-distance cost")
 	assert_lt(GameState.ship.reaction_mass, 100.0, "fuel was actually consumed")
 
 

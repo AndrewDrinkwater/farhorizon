@@ -11,6 +11,9 @@ extends Node
 ##
 ## NOT an autoload (six only) — a plain system node placed in the scene.
 
+## SimClock ticks for one full holding orbit (tuning). One orbit per in-game day.
+const HOLDING_ORBIT_TICKS: int = 24
+
 var _state: int = FlightCore.State.IDLE
 
 
@@ -159,45 +162,71 @@ func _undock() -> void:
 # --- Execution (one step per SimClock tick) ---
 
 func _on_sim_tick(_tick: int) -> void:
+	# Holding = orbiting: advance the ship around the body's holding ring.
+	if GameState.ship.location == Travel.Location.HOLDING:
+		_advance_holding_orbit()
+		return
+
 	var order: Dictionary = GameState.ship.current_order
 	if not _is_under_way():
 		return
 	var body := _resolve_body(String(order.get("target_id", "")))
 	if body == null:
 		return
-	var target: Vector2 = body.position
+	var center: Vector2 = body.position
 	var burn := int(order.get("burn", FlightMath.Burn.STANDARD))
+	var hold_radius := Travel.holding_radius(body.radius)
+	var prev_pos: Vector2 = GameState.ship.position
 
-	if FlightCore.has_arrived(GameState.ship.position, target):
+	# Already at/inside the holding ring → settle into orbit.
+	if prev_pos.distance_to(center) <= hold_radius:
 		_arrive(body)
 		return
 
-	var prev_pos: Vector2 = GameState.ship.position
-	var heading_dir: Vector2 = target - prev_pos
-	if heading_dir.length() > 0.0:
-		GameState.ship.heading = heading_dir.angle()
-	var new_pos: Vector2 = FlightCore.step_position(prev_pos, target, burn)
+	GameState.ship.heading = (center - prev_pos).angle()  # face the body on approach
+	var new_pos: Vector2 = FlightCore.step_position(prev_pos, center, burn)
+	# Stop on the ring (never dive through the body): clamp the crossing step.
+	if new_pos.distance_to(center) <= hold_radius:
+		new_pos = center + (prev_pos - center).normalized() * hold_radius
 	GameState.ship.position = new_pos
-	# Spend reaction mass for the distance actually covered this tick; summed over
-	# the course this equals FlightMath.rm_cost(total_distance, burn).
+	# Spend reaction mass for the distance actually covered this tick.
 	_spend_reaction_mass(FlightMath.rm_cost(prev_pos.distance_to(new_pos), burn))
 
-	if FlightCore.has_arrived(new_pos, target):
+	if new_pos.distance_to(center) <= hold_radius + 0.001:
 		_arrive(body)
 	else:
 		var origin: Vector2 = order.get("origin", new_pos)
-		_set_state(FlightCore.executing_state(origin, target, new_pos, burn))
+		_set_state(FlightCore.executing_state(origin, center, new_pos, burn))
 
 
-## Arrival: settle into the target's holding area; the course is complete.
+## Arrival: settle onto the body's holding ring (not its centre) at the approach
+## angle; the course is complete and the ship begins orbiting.
 func _arrive(body: BodyData) -> void:
-	GameState.ship.position = body.position
+	var center: Vector2 = body.position
+	var to_ship: Vector2 = GameState.ship.position - center
+	if to_ship.length() < 0.001:
+		to_ship = Vector2.from_angle(GameState.ship.heading + PI)  # arrived dead-centre
+	GameState.ship.position = center + to_ship.normalized() * Travel.holding_radius(body.radius)
+	GameState.ship.orbit_angle = (GameState.ship.position - center).angle()
 	GameState.ship.location = Travel.Location.HOLDING
 	GameState.ship.location_body_id = body.id
 	GameState.ship.current_order = {}
 	_set_state(FlightCore.State.IDLE)
 	_acknowledge("VOICE_SHIP_ARRIVED")
 	_notify_context()
+
+
+## One orbit step around the holding body (authoritative; the view interpolates).
+func _advance_holding_orbit() -> void:
+	var body := _resolve_body(GameState.ship.location_body_id)
+	if body == null:
+		return
+	GameState.ship.orbit_angle = wrapf(
+		GameState.ship.orbit_angle + TAU / float(HOLDING_ORBIT_TICKS), 0.0, TAU)
+	var new_pos: Vector2 = body.position \
+		+ Vector2.from_angle(GameState.ship.orbit_angle) * Travel.holding_radius(body.radius)
+	GameState.ship.heading = (new_pos - GameState.ship.position).angle()  # tangent to the ring
+	GameState.ship.position = new_pos
 
 
 # --- Fuel ---

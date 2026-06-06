@@ -4,6 +4,28 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — Fix: arrive/depart through the body; orbit is now authoritative
+
+Two travel bugs, same root cause: the holding orbit was a view-only effect while
+the authoritative position sat at the body *centre*. So on arrival the ship
+interpolated into the centre then the view yanked it out to the ring; on
+departure the course started from the centre.
+
+Fix: the **holding ring is authoritative** (`Travel.holding_radius` =
+body radius + gap). The ship now stops *on the ring* at the approach angle
+(clamped so a crossing step never dives through the body), and `FlightController`
+advances the orbit per tick (`ShipState.orbit_angle`, one orbit per in-game day),
+so the view just interpolates the real position. Arrival and departure are both
+from the ring — no centre dive, no centre jump. `ShipView` reverted to plain
+interpolation (no view-side orbit). `orbit_angle` is serialized.
+
+**Tests:** added holding-orbit-advances and depart-from-ring-not-centre; updated
+arrival + fuel expectations (ship travels to the ring, not the centre). 84/84
+green; verified with a real-clock screenshot (ship sits on the ring beside the
+planet, orbiting).
+
+---
+
 ## 2026-06-06 — Holding = orbiting (ship circles the body)
 
 Gave "holding" a visual meaning: when the ship is HOLDING at a body it slowly
