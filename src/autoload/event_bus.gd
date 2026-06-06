@@ -18,6 +18,9 @@ signal order_acknowledged(voice: String, line: String)
 signal order_rejected(reason: String)
 signal order_belayed()
 
+# --- Helm / Nav Plot (ADR 0013) — UI compose-time selection ---
+signal nav_target_selected(target_id: String)
+
 # --- Flight (ADR 0005) ---
 signal flight_state_changed(state: int)
 
