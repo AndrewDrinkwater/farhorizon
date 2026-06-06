@@ -2,8 +2,10 @@ class_name SystemView
 extends Node2D
 ## Builds the spatial view of a star system from authored SystemData: a static
 ## BodyView per body, the ship marker, and a camera that follows the ship
-## (ADR 0005). Presentation only — it reads GameState/authored data and never
-## mutates state. The Helm Nav Plot (step 8) grows from this.
+## (ADR 0005). This is the Helm Nav Plot's map: clicking a body selects it as the
+## course target (compose-time intent, ADR 0013/0014) — it emits
+## EventBus.nav_target_selected and the Helm console takes it from there. The map
+## owns its own selection highlight. Presentation only — never mutates state.
 
 ## Render scale: world units -> pixels. The single place wu maps to screen
 ## (CONVENTIONS.md "do not hardcode distances"). 1:1 for now, tune by feel.
@@ -14,6 +16,7 @@ const CAMERA_ZOOM: float = 0.45
 var _ship_view: ShipView
 var _camera: Camera2D
 var _system: SystemData
+var _body_views: Dictionary = {}  # id: String -> BodyView
 
 
 func build(system: SystemData) -> void:
@@ -24,6 +27,7 @@ func build(system: SystemData) -> void:
 		var view := BodyView.new()
 		add_child(view)
 		view.setup(body)
+		_body_views[body.id] = view
 
 	_ship_view = ShipView.new()
 	add_child(_ship_view)
@@ -35,25 +39,22 @@ func build(system: SystemData) -> void:
 	_ship_view.add_child(_camera)
 	_camera.make_current()
 
+	EventBus.nav_target_selected.connect(_on_target_selected)
 
-## TEMPORARY (step 6): click a body to plot + engage a Standard course, so the
-## ship visibly flies before the Helm Nav Plot exists. Replaced by the proper
-## compose → preview → confirm flow in step 8 (docs/consoles/helm.md).
+
 func _unhandled_input(event: InputEvent) -> void:
 	if _system == null:
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var world := get_global_mouse_position()
-		var target := _body_at(world)
+		var target := _body_at(get_global_mouse_position())
 		if target != null:
-			# Parked at a refuelling body? Dock. Otherwise plot + engage a course.
-			if target.can_refuel and FlightCore.has_arrived(GameState.ship.position, target.position):
-				EventBus.order_issued.emit({"type": "dock"})
-			else:
-				EventBus.order_issued.emit({
-					"type": "set_course", "target_id": target.id, "burn": FlightMath.Burn.STANDARD,
-				})
-				EventBus.order_issued.emit({"type": "engage"})
+			EventBus.nav_target_selected.emit(target.id)
+
+
+## Keep the map's highlight in sync with the selected target (single source).
+func _on_target_selected(target_id: String) -> void:
+	for id: String in _body_views:
+		_body_views[id].set_selected(id == target_id)
 
 
 func _body_at(world_pos: Vector2) -> BodyData:

@@ -33,6 +33,26 @@ FLIGHT_STATE_IN_ORBIT,In Orbit
 VOICE_SHIP_COURSE_LAID_IN,Course laid in. Engaging.
 VOICE_SHIP_ALL_STOP,Answering all stop.
 VOICE_SHIP_BELAYED,Order belayed.
+VOICE_SHIP_ORBIT_ESTABLISHED,Orbit established.
+VOICE_SHIP_ORBIT_BROKEN,Breaking orbit.
+VOICE_SPEAKER_SHIP,Ship
+LOG_LINE_FORMAT,{speaker}: {line}
+HELM_COURSE_ORDER,Course Order
+HELM_FLIGHT_STATUS,Flight Status
+HELM_ORDER_LOG,Order Log
+HELM_BURN_LABEL,Burn
+HELM_TARGET,Target
+HELM_DISTANCE,Distance
+HELM_ETA,ETA
+HELM_RM_COST,RM Cost
+HELM_STATUS,Status
+HELM_NO_TARGET,— none —
+HELM_ETA_FORMAT,{hours} h
+HELM_DISTANCE_FORMAT,{wu} wu
+HELM_RM_FORMAT,{rm} RM
+ORDER_REJECT_NOT_AT_BODY,Unable — not at a body.
+ORDER_REJECT_NOT_IN_ORBIT,Unable — not in orbit.
+TIME_PAUSE,❚❚
 ORDER_REJECT_TARGET_UNKNOWN,Unable — unknown target.
 ORDER_REJECT_NO_COURSE,Unable — no course laid in.
 ORDER_REJECT_BURN_INVALID,Unable — invalid burn intensity.

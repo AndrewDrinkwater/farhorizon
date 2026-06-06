@@ -9,6 +9,15 @@ extends Node2D
 const LABEL_SCALE: float = 2.2
 
 var data: BodyData
+var _selected: bool = false
+
+
+## Highlight this body as the current Nav Plot target (ADR 0013).
+func set_selected(selected: bool) -> void:
+	if _selected == selected:
+		return
+	_selected = selected
+	queue_redraw()
 
 
 func setup(p_data: BodyData) -> void:
@@ -25,6 +34,8 @@ func setup(p_data: BodyData) -> void:
 func _draw() -> void:
 	if data == null:
 		return
+	if _selected:
+		draw_arc(Vector2.ZERO, data.radius + 18.0, 0.0, TAU, 48, Palette.ACCENT, 2.0, true)
 	match data.kind:
 		BodyData.Kind.STAR:
 			draw_circle(Vector2.ZERO, data.radius, data.tint)

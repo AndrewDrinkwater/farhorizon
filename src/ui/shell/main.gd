@@ -1,16 +1,15 @@
 extends Node
-## Main entry scene (the terminal shell root).
-##
-## Interim shell — boots the run: loads the hardcoded system into GameState,
-## builds the spatial SystemView (bodies + ship + camera, step 4), and overlays
-## the screen-fixed HUD (clock readout + debug overlay). The persistent terminal
-## shell + Helm console replace this in build-order step 8.
+## Terminal shell root (ADR 0006/0013). Boots the run and assembles the
+## persistent shell: the Nav Plot map (SystemView), the shell time controls, and
+## the active console (Helm) laid over it — clock always running and visible. The
+## debug overlay sits on top. Consoles are screen-fixed under a themed UI layer;
+## the map lives in world space behind it.
 
-const ClockReadout := preload("res://src/ui/shell/clock_readout.gd")
-const FuelReadout := preload("res://src/ui/shell/fuel_readout.gd")
+const TimeControlsScene := preload("res://src/ui/shell/time_controls.gd")
+const HelmConsoleScene := preload("res://src/ui/consoles/helm_console.gd")
 const DebugOverlay := preload("res://src/ui/components/debug_overlay.gd")
 
-## Starting system until a save/new-game flow chooses one (step 3+ wiring).
+## Starting system until a save/new-game flow chooses one.
 const DEFAULT_SYSTEM_ID: String = "sol"
 
 
@@ -18,7 +17,7 @@ func _ready() -> void:
 	_bootstrap_system()
 	add_child(FlightController.new())  # system side of flight; talks via EventBus
 	_build_world()
-	_build_hud()
+	_build_ui()
 	add_child(DebugOverlay.new())
 
 	print("[Far Horizon] boot — v%s, schema %d · system '%s' (Space=pause, [/]=speed, F1=debug)" % [
@@ -48,21 +47,21 @@ func _build_world() -> void:
 	view.build(system)
 
 
-## HUD lives under a CanvasLayer so it stays screen-fixed (the world Camera2D
-## would otherwise pan/zoom these Controls with it).
-func _build_hud() -> void:
+## UI lives under a CanvasLayer + themed root Control so it stays screen-fixed
+## (the world Camera2D would otherwise pan/zoom it) and inherits the terminal
+## theme. The root ignores mouse so empty-space clicks reach the Nav Plot map.
+func _build_ui() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 
-	var title := Label.new()
-	title.position = Vector2(40.0, 40.0)
-	title.text = "FAR HORIZON  v%s" % GameVersion.GAME_VERSION
-	layer.add_child(title)
+	var root := Control.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.theme = TerminalTheme.build()
+	layer.add_child(root)
 
-	var clock: Label = ClockReadout.new()
-	clock.position = Vector2(40.0, 72.0)
-	layer.add_child(clock)
+	var time_controls := TimeControlsScene.new()
+	time_controls.position = Vector2(16.0, 12.0)
+	root.add_child(time_controls)
 
-	var fuel: Label = FuelReadout.new()
-	fuel.position = Vector2(40.0, 96.0)
-	layer.add_child(fuel)
+	root.add_child(HelmConsoleScene.new())
