@@ -313,3 +313,6 @@ Each major fork has an ADR in `docs/adr/`. See:
 - 0013 — UI organized as captain's consoles
 - 0014 — Order lifecycle: acknowledged intents, voiced by crew slot
 - 0015 — Travel pipeline: location, course, and context-derived orders
+- 0016 — Orrery Nav Plot: log-compressed display (presentation ≠ sim scale)
+- 0017 — Sensor & contact model: charted vs transient, real-space detection
+- 0018 — Hierarchical bodies: moons and parent-relative orrery

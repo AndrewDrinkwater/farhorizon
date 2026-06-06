@@ -10,10 +10,13 @@ a mission clock. Being rebuilt deliberately from scratch; α0.1 = "The Ship Flie
 
 ## Where the decisions live (read before changing architecture)
 - `ARCHITECTURE.md` — the system design (autoloads, EventBus, clock, flight, UI).
-- `docs/ALPHA-0.1-SPEC.md` — current milestone + **build order** (you work this).
+- `docs/ALPHA-0.2-SPEC.md` — current milestone + **build order** (you work this).
+  `docs/ALPHA-0.1-SPEC.md` is the completed first milestone (history).
 - `docs/CONVENTIONS.md` — canonical units, versioning, style.
 - `docs/consoles/helm.md` — the first console (flight + navigation).
-- `docs/adr/0001..0015` — one decision per file. **If you change a decision,
+- `docs/navigation.md` — the orrery + sensor navigation model with the pure
+  `core` function contracts and test outlines (planned for α0.2).
+- `docs/adr/0001..0018` — one decision per file. **If you change a decision,
   add/supersede an ADR.**
 - `DEVLOG.md` — append a short entry per work session (newest on top).
 
@@ -85,9 +88,14 @@ localization/  strings.csv
 - **Tuning left (by feel, not blocking):** system spacing + the tick/burn
   numeric constants are sensible baselines, not play-tuned (they're clearly
   marked; none touch logic).
-- **Next:** α0.2 scoping — pick the next slice from the design vision (e.g. a
-  second console, scanning, or multi-system groundwork). No spec authored yet;
-  agree scope + write the milestone spec before building, as with α0.1.
+- **Next:** **α0.2 "Navigation II"** — spec written
+  (`docs/ALPHA-0.2-SPEC.md`); decisions in ADR 0016 (orrery), 0017
+  (sensors/contacts), 0018 (moons/hierarchy); `core` contracts + build order in
+  `docs/navigation.md`. Scope: orrery Nav Plot (display only — real AU distances
+  unchanged), body hierarchy (moons), charted/transient contacts with real-space
+  sensor detection, and a true-scale tactical scope. **ADR 0018 is *proposed*
+  (awaiting sign-off).** Work the spec's build order; the pure `core` pieces
+  (`OrreryProjection`, `Sensors`) are written + GUT-tested first.
 
 ## Workflow expectations
 - Keep `DEVLOG.md` updated; add an ADR for any architectural fork.

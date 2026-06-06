@@ -4,6 +4,54 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — α0.2 spec: "Navigation II" (orrery + moons + sensors)
+
+Spec session (no code). Turned the navigation design into a milestone:
+- **`docs/ALPHA-0.2-SPEC.md`** — "Navigation II: the Instrument": orrery Nav Plot
+  (display only; real AU distances/fuel unchanged), moons, charted/transient
+  contacts via real-space sensor detection, and a true-scale tactical scope.
+  Definition-of-done + build order in the α0.1 style.
+- **ADR 0018 (proposed)** — hierarchical bodies: `BodyData.parent_id`, moons as
+  ordinary flyable charted bodies at absolute static positions, parent-relative
+  orrery projection, and a focus-a-body sub-view. Reaffirms ADR 0005 (bodies
+  static; any orbital motion is cosmetic only — the orrery is a display style,
+  not animated mechanics).
+- Folded three refinements into `docs/navigation.md`: a `project_child` moon
+  contract; a **segment (capsule) sensor check** so Hard-burn warp can't tunnel
+  past a contact between ticks; and projecting about the star body + sampling the
+  course path (curved line). Decision log + CLAUDE pointers updated to 0018 and
+  the 0.2 spec.
+
+Awaiting sign-off on ADR 0018 / the spec before building. Suggested first code:
+`OrreryProjection` + `Sensors` pure `core` with GUT tests.
+
+---
+
+## 2026-06-06 — Design: orrery Nav Plot + sensor/contact model (α0.2 prep)
+
+Design session (no code). The realistic 40 AU scale was hurting gameability —
+can't see the system at once, fiddly targeting, navigation lacked decisions.
+Resolved by separating **presentation scale from simulation scale**:
+
+- **Orrery Nav Plot (ADR 0016):** keep real coordinates as the sim truth; the
+  Nav Plot renders bodies through a pure log projection — compress radius onto
+  rings, preserve bearing — so the whole system fits one screen. Supersedes the
+  true-scale layout (display only; AU distances/fuel unchanged).
+- **Sensor & contact model (ADR 0017):** split contacts into **charted**
+  (gravimetric — always shown) and **transient** (non-gravimetric — only within
+  sensor range). Detection is pure `core`, decided in real space on `sim_tick`,
+  so the chart's non-linearity never matters. Orrery shows **contacts-only**
+  (no warped sensor boundary); a true-scale **tactical scope** shows the real
+  sensor circle. Sensor range becomes a decision (sweep coverage; upgrade
+  sensors → Grow/crew).
+- Wrote `docs/navigation.md` with the `OrreryProjection.project` and
+  `Sensors.contacts_in_range` contracts + test outlines, and a suggested α0.2
+  nav-slice build order.
+
+Not built yet — this is the α0.2 design, ready to fold into the milestone spec.
+
+---
+
 ## 2026-06-06 — Standard burn = Warp 1 (light speed)
 
 Per the captain: Standard cruise is now **Warp 1 = c**, so 1 AU (8 light-minutes)
