@@ -10,8 +10,8 @@ extends Node2D
 ## Render scale: world units -> pixels. The single place wu maps to screen
 ## (CONVENTIONS.md "do not hardcode distances"). 1:1 for now, tune by feel.
 const PIXELS_PER_WU: float = 1.0
-## Camera zoom (tuning); < 1 zooms out to fit the system.
-const CAMERA_ZOOM: float = 0.45
+## Mouse-wheel zoom step (multiplicative), within CameraFit's bounds.
+const ZOOM_STEP: float = 1.12
 
 var _ship_view: ShipView
 var _camera: Camera2D
@@ -29,12 +29,17 @@ func build(system: SystemData) -> void:
 		view.setup(body)
 		_body_views[body.id] = view
 
+	var course_line := CourseLine.new()
+	add_child(course_line)
+
 	_ship_view = ShipView.new()
 	add_child(_ship_view)
 	_ship_view.position = GameState.ship.position
+	course_line.ship_view = _ship_view
 
 	_camera = Camera2D.new()
-	_camera.zoom = Vector2(CAMERA_ZOOM, CAMERA_ZOOM)
+	var zoom := CameraFit.fit_zoom(_system_extent() * CameraFit.MARGIN, get_viewport_rect().size)
+	_camera.zoom = Vector2(zoom, zoom)
 	_camera.ignore_rotation = true  # follow position, not heading — view stays upright
 	_ship_view.add_child(_camera)
 	_camera.make_current()
@@ -42,13 +47,34 @@ func build(system: SystemData) -> void:
 	EventBus.nav_target_selected.connect(_on_target_selected)
 
 
+## Radius (wu) from the ship's start that encloses every body — used to frame the
+## system at the right initial zoom (CONVENTIONS.md camera bounds).
+func _system_extent() -> float:
+	var extent: float = 0.0
+	for body: BodyData in _system.bodies:
+		extent = maxf(extent, GameState.ship.position.distance_to(body.position) + body.radius)
+	return extent
+
+
 func _unhandled_input(event: InputEvent) -> void:
-	if _system == null:
+	if _system == null or not (event is InputEventMouseButton) or not event.pressed:
 		return
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var target := _body_at(get_global_mouse_position())
-		if target != null:
-			EventBus.nav_target_selected.emit(target.id)
+	match event.button_index:
+		MOUSE_BUTTON_LEFT:
+			var target := _body_at(get_global_mouse_position())
+			if target != null:
+				EventBus.nav_target_selected.emit(target.id)
+		MOUSE_BUTTON_WHEEL_UP:
+			_apply_zoom(ZOOM_STEP)
+		MOUSE_BUTTON_WHEEL_DOWN:
+			_apply_zoom(1.0 / ZOOM_STEP)
+
+
+func _apply_zoom(factor: float) -> void:
+	if _camera == null:
+		return
+	var z := CameraFit.clamp_zoom(_camera.zoom.x * factor)
+	_camera.zoom = Vector2(z, z)
 
 
 ## Keep the map's highlight in sync with the selected target (single source).

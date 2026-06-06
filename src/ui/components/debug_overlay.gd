@@ -36,7 +36,7 @@ func _process(_delta: float) -> void:
 		return
 	var pos := GameState.ship.position
 	_label.text = "\n".join([
-		"DEBUG OVERLAY  (F1 to toggle)",
+		"DEBUG OVERLAY  (F3 to toggle)",
 		"tick:      %d" % SimClock.get_tick(),
 		"speed:     %.1fx%s" % [SimClock.get_speed(), "  (paused)" if SimClock.is_paused() else ""],
 		"sec/tick:  %.2f" % SimClock.SECONDS_PER_TICK,
