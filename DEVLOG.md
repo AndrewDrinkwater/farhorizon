@@ -10,9 +10,11 @@ Gave "holding" a visual meaning: when the ship is HOLDING at a body it slowly
 circles it (and parks at the same offset when DOCKED). The orbit is cosmetic —
 the authoritative position stays at the body for logic (ADR 0004) — and advances
 on sim time, so it scales with speed and freezes when paused. Implemented in
-`ShipView` (orbit radius = body radius + gap, ~30s/orbit at 1×). Verified by
-flying to Verdant and screenshotting the ship on its orbit ring; Flight Status
-reads "Holding: Verdant". 82/82 tests still green.
+`ShipView` (orbit radius = body radius + gap, ~30s/orbit at 1×). The ship eases
+onto the ring from wherever it arrives (a smoothstep radius blend over ~0.9s)
+instead of popping. Verified the rendered distance settling smoothly onto the
+ring (74 wu), and screenshotted the ship orbiting Verdant; Flight Status reads
+"Holding: Verdant". 82/82 tests still green.
 
 ---
 

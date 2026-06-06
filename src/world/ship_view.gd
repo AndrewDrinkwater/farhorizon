@@ -15,12 +15,19 @@ const TINT: Color = Color(0.9, 0.95, 1.0)
 ## Orbit radius beyond the body's own radius (wu), and seconds per orbit at 1x.
 const ORBIT_GAP: float = 26.0
 const ORBIT_PERIOD: float = 30.0
+## Sim-seconds (at 1x) to ease from the arrival point out onto the orbit ring.
+const ENTRY_TIME: float = 0.9
 
 ## Render interpolation endpoints: where we were at the last tick, and the latest
 ## authoritative position (re-read each frame so handler ordering can't matter).
 var _from: Vector2
 var _to: Vector2
+# Orbit state. _orbit_blend eases 0->1 from the arrival radius to the ring, so
+# the ship spirals into orbit instead of popping onto the ring.
+var _orbiting: bool = false
 var _orbit_angle: float = 0.0
+var _orbit_blend: float = 0.0
+var _orbit_entry_radius: float = 0.0
 
 
 func _ready() -> void:
@@ -43,18 +50,38 @@ func _process(delta: float) -> void:
 	if ship.location != Travel.Location.DEEP_SPACE:
 		var body := _resolve_body(ship.location_body_id)
 		if body != null:
-			if ship.location == Travel.Location.HOLDING:
-				_orbit_angle += delta * SimClock.get_speed() * (TAU / ORBIT_PERIOD)
-			var radius := body.radius + ORBIT_GAP
-			position = body.position + Vector2.from_angle(_orbit_angle) * radius
-			rotation = _orbit_angle + PI * 0.5  # face the direction of travel
+			if not _orbiting:
+				_begin_orbit(ship, body)
+			_update_orbit(ship, body, delta)
 			_from = position
 			_to = position
 			return
+	_orbiting = false
 	# Under way / drifting: interpolate the authoritative position between ticks.
 	_to = ship.position
 	position = _from.lerp(_to, clampf(SimClock.get_tick_fraction(), 0.0, 1.0))
 	rotation = ship.heading
+
+
+## Start an orbit from wherever the ship currently is, so there's no jump: the
+## entry radius/angle are taken from the current rendered position. A fresh dock
+## (e.g. on load) starts already settled on the ring.
+func _begin_orbit(ship: ShipState, body: BodyData) -> void:
+	_orbiting = true
+	var to_ship := position - body.position
+	_orbit_entry_radius = to_ship.length()
+	_orbit_angle = to_ship.angle() if _orbit_entry_radius > 1.0 else ship.heading + PI
+	_orbit_blend = 1.0 if ship.location == Travel.Location.DOCKED else 0.0
+
+
+func _update_orbit(ship: ShipState, body: BodyData, delta: float) -> void:
+	var step := delta * SimClock.get_speed()
+	if ship.location == Travel.Location.HOLDING:
+		_orbit_blend = minf(1.0, _orbit_blend + step / ENTRY_TIME)
+		_orbit_angle += step * (TAU / ORBIT_PERIOD)
+	var radius := lerpf(_orbit_entry_radius, body.radius + ORBIT_GAP, smoothstep(0.0, 1.0, _orbit_blend))
+	position = body.position + Vector2.from_angle(_orbit_angle) * radius
+	rotation = _orbit_angle + PI * 0.5  # face the direction of travel
 
 
 func _resolve_body(body_id: String) -> BodyData:
