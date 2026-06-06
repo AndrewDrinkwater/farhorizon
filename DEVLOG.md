@@ -4,6 +4,19 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — Fix: Helm console rendered off-screen
+
+Playtest caught the Helm panels invisible. Cause: `HelmConsole` (a plain Control
+under another plain Control) stayed size (0,0) — `set_anchors_preset(FULL_RECT)`
+doesn't lay out a child of a non-Container parent — so its corner-anchored panels
+landed off-screen (e.g. Course Order at y=−300). Fixed by setting explicit
+full-rect anchors/offsets in `_ready`. Verified with a screenshot harness
+(`tools/screenshot.gd`, a non-headless dev utility): all three panels now sit at
+their corners with the map behind. The console is persistent (always on, no
+toggle). 74/74 still green.
+
+---
+
 ## 2026-06-06 — Session 9: Polish + feel pass — α0.1 complete (step 9)
 
 Milestone wrap. Clarity/camera polish, a usable save/load, done-criteria confirmed.

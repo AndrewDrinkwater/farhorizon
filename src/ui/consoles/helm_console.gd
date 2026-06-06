@@ -33,7 +33,14 @@ var _order_log: TList
 
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# Fill the parent explicitly: a plain-Control parent doesn't lay us out, and
+	# set_anchors_preset alone left this at size 0 (panels then anchor off-screen).
+	anchor_right = 1.0
+	anchor_bottom = 1.0
+	offset_left = 0.0
+	offset_top = 0.0
+	offset_right = 0.0
+	offset_bottom = 0.0
 	mouse_filter = Control.MOUSE_FILTER_IGNORE  # let map clicks through; panels still catch theirs
 	_build_course_order()
 	_build_flight_status()
