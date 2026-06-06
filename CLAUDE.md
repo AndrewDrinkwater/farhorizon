@@ -88,14 +88,18 @@ localization/  strings.csv
 - **Tuning left (by feel, not blocking):** system spacing + the tick/burn
   numeric constants are sensible baselines, not play-tuned (they're clearly
   marked; none touch logic).
-- **Next:** **α0.2 "Navigation II"** — spec written
-  (`docs/ALPHA-0.2-SPEC.md`); decisions in ADR 0016 (orrery), 0017
-  (sensors/contacts), 0018 (moons/hierarchy); `core` contracts + build order in
-  `docs/navigation.md`. Scope: orrery Nav Plot (display only — real AU distances
-  unchanged), body hierarchy (moons), charted/transient contacts with real-space
-  sensor detection, and a true-scale tactical scope. **ADR 0018 is *proposed*
-  (awaiting sign-off).** Work the spec's build order; the pure `core` pieces
-  (`OrreryProjection`, `Sensors`) are written + GUT-tested first.
+- **α0.2 "Navigation II" — mostly built** (`docs/ALPHA-0.2-SPEC.md`; ADRs
+  0016/0017/0018 accepted). Done: orrery Nav Plot (`OrreryView`, screen-space log
+  projection — real AU distances unchanged), moons (`BodyData.parent_id` +
+  parent-relative `project_child`), sensor/contact model (`Sensors`,
+  `SensorController` on sim_tick, `ContactsState` saved, contacts wink in/out),
+  and the true-scale tactical scope (`TacticalView`, **T** to toggle). Pure core
+  (`OrreryProjection`, `Sensors`) GUT-tested. **103 tests green.**
+- **Remaining in α0.2:** step 7 focus-a-body moon sub-view (deferred to α0.3 —
+  moons are already directly targetable on the orrery) and step 9 feel pass
+  (orrery log band / sensor radius / glyphs — tune in-engine by F5).
+- **Next:** play-tune the nav feel, then scope α0.3 (focus sub-view, scan/identify
+  action, or a second console) — write the spec before building, as before.
 
 ## Workflow expectations
 - Keep `DEVLOG.md` updated; add an ADR for any architectural fork.
