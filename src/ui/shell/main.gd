@@ -21,7 +21,7 @@ func _ready() -> void:
 	_build_ui()
 	add_child(DebugOverlay.new())
 
-	print("[Far Horizon] boot — v%s, schema %d · system '%s' (Space=pause, [/]=speed, F3=debug, F5/F9=save/load)" % [
+	print("[Far Horizon] boot — v%s, schema %d · system '%s' (Space=pause, [/]=speed, F3=debug, F5/F9=save/load, wheel=zoom, RMB=pan, C=recenter)" % [
 		GameVersion.GAME_VERSION, GameVersion.SAVE_SCHEMA_VERSION, GameState.system.system_id,
 	])
 

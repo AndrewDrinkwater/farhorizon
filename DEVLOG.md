@@ -4,6 +4,25 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — Nav Plot chart aids (true scale, readable)
+
+True AU scale spans 40×, so the inner planets crowded at any whole-system zoom
+and the default view was too wide. Kept distances exactly real and added chart
+structure + navigation (captain's call):
+- **Orbit rings:** faint concentric circles from the star at each body's orbital
+  radius (`OrbitRings`), constant on-screen line width. The map now reads as a
+  real chart — each body sits on its AU ring.
+- **Inner-system default zoom:** start framed on ~3 AU so the Sol↔1 AU layer is
+  spacious (was ~14 AU).
+- **Free camera:** right-drag to pan (free look), wheel to zoom, `C` (new
+  `recenter_view` action) to re-centre on the ship; the camera also re-follows
+  when a course is engaged. Camera is now independent of the ship (was a child).
+
+Verified by screenshots: the inner view is spacious with Verdant on its ring,
+and zoomed out the concentric rings show the full 1→40 AU structure. 85/85 green.
+
+---
+
 ## 2026-06-06 — Warp/c speed model + realistic AU distances
 
 Re-anchored speed + spacing to physics, per the captain:

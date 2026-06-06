@@ -1,32 +1,35 @@
 class_name SystemView
 extends Node2D
-## Builds the spatial view of a star system from authored SystemData: a static
-## BodyView per body, the ship marker, and a camera that follows the ship
-## (ADR 0005). This is the Helm Nav Plot's map: clicking a body selects it as the
-## course target (compose-time intent, ADR 0013/0014) — it emits
-## EventBus.nav_target_selected and the Helm console takes it from there. The map
-## owns its own selection highlight. Presentation only — never mutates state.
+## Builds the Helm Nav Plot: orbit rings, a static BodyView per body, the ship
+## marker, and a camera. Clicking a body selects it as the course target (ADR
+## 0013/0014) → emits EventBus.nav_target_selected. The camera follows the ship
+## but can be panned freely (right-drag) and re-centred; wheel to zoom. Bodies
+## sit at true AU distances, so the camera/markers carry the readability (see
+## BodyView / OrbitRings). Presentation only — never mutates state.
 
-## Render scale: world units -> pixels. The single place wu maps to screen
-## (CONVENTIONS.md "do not hardcode distances"). 1:1 for now, tune by feel.
 const PIXELS_PER_WU: float = 1.0
 ## Mouse-wheel zoom step (multiplicative), within CameraFit's bounds.
 const ZOOM_STEP: float = 1.12
-## Default view framed at start (wu radius around the ship). The inner system is
-## visible; wheel out to reach the far (40 AU) bodies. ~14 AU.
-const DEFAULT_VIEW_RADIUS_WU: float = 14000.0
-## Click tolerance in screen pixels (markers are constant on-screen size).
+## Default view framed at start (wu radius around the ship): the inner system, so
+## the Sol↔1 AU layer reads well. Wheel/pan out for the far (40 AU) bodies. ~3 AU.
+const DEFAULT_VIEW_RADIUS_WU: float = 3000.0
+## Click tolerance in screen pixels (markers are a constant on-screen size).
 const PICK_PX: float = 20.0
 
 var _ship_view: ShipView
 var _camera: Camera2D
 var _system: SystemData
 var _body_views: Dictionary = {}  # id: String -> BodyView
+var _follow: bool = true  # camera tracks the ship until the player pans away
 
 
 func build(system: SystemData) -> void:
 	_system = system
 	scale = Vector2(PIXELS_PER_WU, PIXELS_PER_WU)
+
+	var rings := OrbitRings.new()
+	add_child(rings)
+	rings.setup(system)
 
 	for body: BodyData in system.bodies:
 		var view := BodyView.new()
@@ -43,28 +46,42 @@ func build(system: SystemData) -> void:
 	course_line.ship_view = _ship_view
 
 	_camera = Camera2D.new()
-	# Frame the inner system at start (the far bodies are reachable by wheeling out).
+	_camera.position = GameState.ship.position
 	var zoom := CameraFit.fit_zoom(DEFAULT_VIEW_RADIUS_WU, get_viewport_rect().size)
 	_camera.zoom = Vector2(zoom, zoom)
-	_camera.ignore_rotation = true  # follow position, not heading — view stays upright
-	_ship_view.add_child(_camera)
+	add_child(_camera)
 	_camera.make_current()
 
 	EventBus.nav_target_selected.connect(_on_target_selected)
+	# Re-follow when a course is engaged, so travel stays in view.
+	EventBus.flight_state_changed.connect(_on_flight_state_changed)
+
+
+func _process(_delta: float) -> void:
+	if _follow and _camera != null and _ship_view != null:
+		_camera.position = _ship_view.position
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _system == null or not (event is InputEventMouseButton) or not event.pressed:
+	if _system == null:
 		return
-	match event.button_index:
-		MOUSE_BUTTON_LEFT:
-			var target := _body_at(get_global_mouse_position())
-			if target != null:
-				EventBus.nav_target_selected.emit(target.id)
-		MOUSE_BUTTON_WHEEL_UP:
-			_apply_zoom(ZOOM_STEP)
-		MOUSE_BUTTON_WHEEL_DOWN:
-			_apply_zoom(1.0 / ZOOM_STEP)
+	if event.is_action_pressed("recenter_view"):
+		_follow = true
+		return
+	if event is InputEventMouseButton and event.pressed:
+		match event.button_index:
+			MOUSE_BUTTON_LEFT:
+				var target := _body_at(get_global_mouse_position())
+				if target != null:
+					EventBus.nav_target_selected.emit(target.id)
+			MOUSE_BUTTON_WHEEL_UP:
+				_apply_zoom(ZOOM_STEP)
+			MOUSE_BUTTON_WHEEL_DOWN:
+				_apply_zoom(1.0 / ZOOM_STEP)
+	elif event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_RIGHT) != 0:
+		# Right-drag pans the view (free look); stop following the ship.
+		_follow = false
+		_camera.position -= event.relative / _camera.zoom.x
 
 
 func _apply_zoom(factor: float) -> void:
@@ -72,6 +89,11 @@ func _apply_zoom(factor: float) -> void:
 		return
 	var z := CameraFit.clamp_zoom(_camera.zoom.x * factor)
 	_camera.zoom = Vector2(z, z)
+
+
+func _on_flight_state_changed(state: int) -> void:
+	if state == FlightCore.State.ENGAGING:
+		_follow = true
 
 
 ## Keep the map's highlight in sync with the selected target (single source).
