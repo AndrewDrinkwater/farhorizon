@@ -16,11 +16,12 @@ const DEFAULT_SYSTEM_ID: String = "sol"
 func _ready() -> void:
 	_bootstrap_system()
 	add_child(FlightController.new())  # system side of flight; talks via EventBus
+	add_child(SaveController.new())    # F5 save / F9 load
 	_build_world()
 	_build_ui()
 	add_child(DebugOverlay.new())
 
-	print("[Far Horizon] boot — v%s, schema %d · system '%s' (Space=pause, [/]=speed, F1=debug)" % [
+	print("[Far Horizon] boot — v%s, schema %d · system '%s' (Space=pause, [/]=speed, F3=debug, F5/F9=save/load)" % [
 		GameVersion.GAME_VERSION, GameVersion.SAVE_SCHEMA_VERSION, GameState.system.system_id,
 	])
 

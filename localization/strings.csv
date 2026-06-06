@@ -61,3 +61,8 @@ ORDER_REJECT_INSUFFICIENT_RM,Unable — insufficient reaction mass.
 ORDER_REJECT_NOT_AT_STATION,Unable — not at a station.
 VOICE_SHIP_DOCKED,Docked. Refuelling.
 FUEL_FORMAT,{current} / {max} RM
+SAVE_DONE,Run saved.
+SAVE_FAILED,Save failed.
+LOAD_DONE,Run loaded.
+LOAD_FAILED,Load failed.
+LOAD_NONE,No saved run.
