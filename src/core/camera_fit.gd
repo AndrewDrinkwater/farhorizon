@@ -4,9 +4,10 @@ extends RefCounted
 ## Camera2D zoom that frames a system of a given extent within the viewport, and
 ## defines the zoom bounds the wheel operates within. No node deps; GUT-testable.
 
-## Camera2D zoom bounds (zoom value: larger = more zoomed in).
-const MIN_ZOOM: float = 0.12
-const MAX_ZOOM: float = 1.5
+## Camera2D zoom bounds (zoom value: larger = more zoomed in). The low floor lets
+## the player zoom out to frame the whole AU-scale system (out to ~40 AU).
+const MIN_ZOOM: float = 0.004
+const MAX_ZOOM: float = 2.0
 ## Padding factor so bodies aren't flush against the screen edge.
 const MARGIN: float = 1.18
 

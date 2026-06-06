@@ -5,6 +5,11 @@ extends RefCounted
 ## the single GUT-tested source of truth the Helm uses to enable/disable buttons
 ## and the FlightController validates against.
 
+## World units per astronomical unit — the spatial scale (CONVENTIONS.md). Bodies
+## are placed at realistic AU distances (×this); flight speeds derive from it too
+## (FlightMath: Warp 1 = light crosses 1 AU in 8 ticks).
+const WU_PER_AU: float = 1000.0
+
 ## Where the ship is when not under way.
 enum Location { DEEP_SPACE, HOLDING, DOCKED }
 

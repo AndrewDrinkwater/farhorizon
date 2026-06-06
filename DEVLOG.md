@@ -4,6 +4,30 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — Warp/c speed model + realistic AU distances
+
+Re-anchored speed + spacing to physics, per the captain:
+- **Warp 1 = the speed of light.** Light crosses 1 AU in 8 ticks (~8 in-game
+  minutes; real ~8.3, rounded). `Travel.WU_PER_AU = 1000`; Warp 1 =
+  `WU_PER_AU / 8 = 125` wu/tick. Verified: 1 AU @ Warp 1 = exactly 8 min.
+- **Burns are warp factors:** Economy 2.5× c, Standard 4× c, Hard 6× c
+  (312.5 / 500 / 750 wu/tick).
+- **Realistic spacing** (AU × WU_PER_AU): Verdant 1 AU, Rubicon 5.2 AU, Anchorage
+  Station 9.5 AU, Tethys (outer) **40 AU**; ship starts ~1 AU out. The 40 AU haul
+  is ~129 min / 72 RM on Economy (reachable), but exceeds a tank on the faster
+  burns — so the station's refuel matters.
+- **Readable at AU scale:** body + ship markers are now drawn at a **constant
+  on-screen size** (the node cancels the camera zoom), with screen-space click
+  picking, a much lower zoom floor (`CameraFit.MIN_ZOOM = 0.004`), and a default
+  view framing the inner ~14 AU. Wheel out to see the whole 40 AU system; every
+  body stays a legible, clickable marker at any zoom. Course line widths are
+  zoom-compensated too.
+
+Verified via screenshots (default + zoomed-out) and a math check of the anchors.
+85/85 green.
+
+---
+
 ## 2026-06-06 — Fix: clock/ship felt frozen — tick is now 1 in-game minute
 
 The previous pass set `SECONDS_PER_TICK = 60` with tick = 1 hour, so at 1× the

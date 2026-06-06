@@ -11,7 +11,7 @@ func test_fits_extent_within_bounds() -> void:
 
 
 func test_large_system_clamps_to_min_zoom() -> void:
-	assert_eq(CameraFit.fit_zoom(100000.0, VP), CameraFit.MIN_ZOOM, "huge extent zooms all the way out")
+	assert_eq(CameraFit.fit_zoom(10000000.0, VP), CameraFit.MIN_ZOOM, "huge extent zooms all the way out")
 
 
 func test_tiny_or_zero_extent_clamps_to_max_zoom() -> void:

@@ -8,7 +8,8 @@ extends Node2D
 ## between ticks for smooth motion (ADR 0004). Logic never reads the interpolated
 ## value; only the rendered transform uses it.
 
-const SIZE: float = 28.0
+## Constant on-screen size (the node cancels the camera zoom, like BodyView).
+const SIZE: float = 13.0
 const TINT: Color = Color(0.9, 0.95, 1.0)
 
 ## Render interpolation endpoints: where we were at the last tick, and the latest
@@ -31,6 +32,10 @@ func _on_sim_tick(_tick: int) -> void:
 
 
 func _process(_delta: float) -> void:
+	var camera := get_viewport().get_camera_2d()
+	if camera != null and camera.zoom.x > 0.0:
+		scale = Vector2.ONE / camera.zoom.x  # constant on-screen marker size
+
 	var ship: ShipState = GameState.ship
 	# Holding/docked: position is driven smoothly per-frame by the controller
 	# (the orbit), so read it directly rather than tick-interpolating.

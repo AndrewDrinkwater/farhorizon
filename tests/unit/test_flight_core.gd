@@ -26,13 +26,13 @@ func test_has_arrived_within_threshold() -> void:
 
 func test_phase_progression_along_course() -> void:
 	var origin := Vector2.ZERO
-	var target := Vector2(1000.0, 0.0)
+	var target := Vector2(50000.0, 0.0)  # long enough that phases aren't all "arriving"
 	# 10% in → accelerating; 50% → cruising; 90% → decelerating.
-	assert_eq(FlightCore.executing_state(origin, target, Vector2(100.0, 0.0), STD),
+	assert_eq(FlightCore.executing_state(origin, target, Vector2(5000.0, 0.0), STD),
 		FlightCore.State.ACCELERATING, "early course = accelerating")
-	assert_eq(FlightCore.executing_state(origin, target, Vector2(500.0, 0.0), STD),
+	assert_eq(FlightCore.executing_state(origin, target, Vector2(25000.0, 0.0), STD),
 		FlightCore.State.CRUISING, "mid course = cruising")
-	assert_eq(FlightCore.executing_state(origin, target, Vector2(820.0, 0.0), STD),
+	assert_eq(FlightCore.executing_state(origin, target, Vector2(45000.0, 0.0), STD),
 		FlightCore.State.DECELERATING, "late course = decelerating")
 
 

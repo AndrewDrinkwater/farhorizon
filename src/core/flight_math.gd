@@ -14,30 +14,46 @@ extends RefCounted
 ## Burn intensity — the player's control lever (Helm burn selector).
 enum Burn { ECONOMY, STANDARD, HARD }
 
-## Cruise speed in world units per tick (one tick = one in-game minute). Tuned so
-## the nearest planet is a ~2.5-hour standard-burn trip against the Sol spacing.
-const _SPEED_WU_PER_TICK: Dictionary = {
-	Burn.ECONOMY: 1.2,
-	Burn.STANDARD: 2.0,
-	Burn.HARD: 3.4,
+## Warp 1 = the speed of light: light crosses 1 AU in this many ticks (one tick =
+## one in-game minute; real value ~8.3, rounded to 8). So Warp 1 in wu/tick is
+## WU_PER_AU / LIGHT_MINUTES_PER_AU.
+const LIGHT_MINUTES_PER_AU: float = 8.0
+
+## Each burn's warp factor (multiple of light speed). Economy is the slow cruise
+## (2.5× c); Standard/Hard scale up. Speeds derive from these — tuning knobs.
+const _WARP_FACTOR: Dictionary = {
+	Burn.ECONOMY: 2.5,
+	Burn.STANDARD: 4.0,
+	Burn.HARD: 6.0,
 }
 
-## Reaction mass (RM) spent per world unit travelled. Tuned for a "loose" tank
-## (~5+ typical trips before refuelling) against the Sol spacing + 100 RM tank.
+## Reaction mass (RM) spent per world unit travelled. Tuned (against the AU-scale
+## Sol spacing + 100 RM tank) so inner trips are cheap and the 40 AU outer haul
+## needs a refuel stop on the faster burns.
 const _RM_PER_WU: Dictionary = {
-	Burn.ECONOMY: 0.012,
-	Burn.STANDARD: 0.020,
-	Burn.HARD: 0.034,
+	Burn.ECONOMY: 0.0018,
+	Burn.STANDARD: 0.0030,
+	Burn.HARD: 0.0052,
 }
+
+
+## Warp 1 (speed of light) in world units per tick.
+static func warp_1_speed() -> float:
+	return Travel.WU_PER_AU / LIGHT_MINUTES_PER_AU
 
 
 static func is_valid_burn(burn: int) -> bool:
-	return _SPEED_WU_PER_TICK.has(burn)
+	return _WARP_FACTOR.has(burn)
 
 
-## Cruise speed (wu/tick) for a burn intensity.
+## The warp factor (× light speed) for a burn intensity.
+static func warp_factor(burn: int) -> float:
+	return _WARP_FACTOR.get(burn, _WARP_FACTOR[Burn.STANDARD])
+
+
+## Cruise speed (wu/tick) for a burn intensity = warp factor × light speed.
 static func speed_wu_per_tick(burn: int) -> float:
-	return _SPEED_WU_PER_TICK.get(burn, _SPEED_WU_PER_TICK[Burn.STANDARD])
+	return warp_factor(burn) * warp_1_speed()
 
 
 ## Straight-line course distance in world units.

@@ -16,7 +16,7 @@ func test_eta_rounds_up() -> void:
 
 
 func test_higher_burn_is_faster() -> void:
-	var d := 1000.0
+	var d := 100000.0  # large enough to distinguish ETAs at lightspeed-scale burns
 	var eco := FlightMath.eta_ticks(d, FlightMath.Burn.ECONOMY)
 	var std := FlightMath.eta_ticks(d, FlightMath.Burn.STANDARD)
 	var hard := FlightMath.eta_ticks(d, FlightMath.Burn.HARD)

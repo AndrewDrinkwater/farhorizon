@@ -12,6 +12,11 @@ extends Node2D
 const PIXELS_PER_WU: float = 1.0
 ## Mouse-wheel zoom step (multiplicative), within CameraFit's bounds.
 const ZOOM_STEP: float = 1.12
+## Default view framed at start (wu radius around the ship). The inner system is
+## visible; wheel out to reach the far (40 AU) bodies. ~14 AU.
+const DEFAULT_VIEW_RADIUS_WU: float = 14000.0
+## Click tolerance in screen pixels (markers are constant on-screen size).
+const PICK_PX: float = 20.0
 
 var _ship_view: ShipView
 var _camera: Camera2D
@@ -38,22 +43,14 @@ func build(system: SystemData) -> void:
 	course_line.ship_view = _ship_view
 
 	_camera = Camera2D.new()
-	var zoom := CameraFit.fit_zoom(_system_extent() * CameraFit.MARGIN, get_viewport_rect().size)
+	# Frame the inner system at start (the far bodies are reachable by wheeling out).
+	var zoom := CameraFit.fit_zoom(DEFAULT_VIEW_RADIUS_WU, get_viewport_rect().size)
 	_camera.zoom = Vector2(zoom, zoom)
 	_camera.ignore_rotation = true  # follow position, not heading — view stays upright
 	_ship_view.add_child(_camera)
 	_camera.make_current()
 
 	EventBus.nav_target_selected.connect(_on_target_selected)
-
-
-## Radius (wu) from the ship's start that encloses every body — used to frame the
-## system at the right initial zoom (CONVENTIONS.md camera bounds).
-func _system_extent() -> float:
-	var extent: float = 0.0
-	for body: BodyData in _system.bodies:
-		extent = maxf(extent, GameState.ship.position.distance_to(body.position) + body.radius)
-	return extent
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -84,8 +81,14 @@ func _on_target_selected(target_id: String) -> void:
 
 
 func _body_at(world_pos: Vector2) -> BodyData:
+	# Pick in screen space: markers are a constant on-screen size, so a world-space
+	# tolerance would miss distant bodies when zoomed out.
+	var zoom: float = _camera.zoom.x if _camera != null else 1.0
+	var nearest: BodyData = null
+	var nearest_px := PICK_PX
 	for body: BodyData in _system.bodies:
-		# Generous pick radius so small bodies are easy to click.
-		if world_pos.distance_to(body.position) <= maxf(body.radius, 30.0) + 40.0:
-			return body
-	return null
+		var screen_dist := world_pos.distance_to(body.position) * zoom
+		if screen_dist <= nearest_px:
+			nearest_px = screen_dist
+			nearest = body
+	return nearest
