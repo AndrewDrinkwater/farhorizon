@@ -10,6 +10,7 @@ var hull_id: String = "scout"
 var position: Vector2 = Vector2.ZERO
 var heading: float = 0.0  # radians
 var reaction_mass: float = 100.0  # RM (CONVENTIONS.md "Fuel")
+var max_reaction_mass: float = 100.0  # tank capacity; refuel fills to this
 var current_order: Dictionary = {}
 
 
@@ -19,6 +20,7 @@ func to_dict() -> Dictionary:
 		"position": position,
 		"heading": heading,
 		"reaction_mass": reaction_mass,
+		"max_reaction_mass": max_reaction_mass,
 		"current_order": current_order,
 	}
 
@@ -30,5 +32,6 @@ static func from_dict(data: Dictionary) -> ShipState:
 	s.position = data.get("position", s.position)
 	s.heading = float(data.get("heading", s.heading))
 	s.reaction_mass = float(data.get("reaction_mass", s.reaction_mass))
+	s.max_reaction_mass = float(data.get("max_reaction_mass", s.max_reaction_mass))
 	s.current_order = data.get("current_order", s.current_order)
 	return s

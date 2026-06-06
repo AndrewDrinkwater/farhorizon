@@ -44,6 +44,8 @@ func _on_order_issued(order: Dictionary) -> void:
 			_engage()
 		"all_stop":
 			_all_stop()
+		"dock":
+			_dock()
 		_:
 			EventBus.order_rejected.emit("ORDER_REJECT_UNKNOWN")
 
@@ -72,6 +74,16 @@ func _engage() -> void:
 	var order: Dictionary = GameState.ship.current_order
 	if String(order.get("type", "")) != "course":
 		EventBus.order_rejected.emit("ORDER_REJECT_NO_COURSE")
+		return
+	var body := _resolve_body(String(order.get("target_id", "")))
+	if body == null:
+		EventBus.order_rejected.emit("ORDER_REJECT_TARGET_UNKNOWN")
+		return
+	var burn := int(order.get("burn", FlightMath.Burn.STANDARD))
+	# Fuel must bite: refuse a course the tank can't complete (ADR 0005, helm.md).
+	var cost := FlightMath.rm_cost(GameState.ship.position.distance_to(body.position), burn)
+	if cost > GameState.ship.reaction_mass:
+		EventBus.order_rejected.emit("ORDER_REJECT_INSUFFICIENT_RM")
 		return
 	order["engaged"] = true
 	order["origin"] = GameState.ship.position
@@ -114,17 +126,21 @@ func _on_sim_tick(_tick: int) -> void:
 		_arrive(target)
 		return
 
-	var heading_dir: Vector2 = target - GameState.ship.position
+	var prev_pos: Vector2 = GameState.ship.position
+	var heading_dir: Vector2 = target - prev_pos
 	if heading_dir.length() > 0.0:
 		GameState.ship.heading = heading_dir.angle()
-	GameState.ship.position = FlightCore.step_position(GameState.ship.position, target, burn)
-	# Reaction-mass consumption lands in step 7.
+	var new_pos: Vector2 = FlightCore.step_position(prev_pos, target, burn)
+	GameState.ship.position = new_pos
+	# Spend reaction mass for the distance actually covered this tick; summed over
+	# the course this equals FlightMath.rm_cost(total_distance, burn).
+	_spend_reaction_mass(FlightMath.rm_cost(prev_pos.distance_to(new_pos), burn))
 
-	if FlightCore.has_arrived(GameState.ship.position, target):
+	if FlightCore.has_arrived(new_pos, target):
 		_arrive(target)
 	else:
-		var origin: Vector2 = order.get("origin", GameState.ship.position)
-		_set_state(FlightCore.executing_state(origin, target, GameState.ship.position, burn))
+		var origin: Vector2 = order.get("origin", new_pos)
+		_set_state(FlightCore.executing_state(origin, target, new_pos, burn))
 
 
 func _arrive(target: Vector2) -> void:
@@ -133,6 +149,38 @@ func _arrive(target: Vector2) -> void:
 	# we're holding at (and so a save records the orbit).
 	GameState.ship.current_order["engaged"] = false
 	_set_state(FlightCore.State.IN_ORBIT)
+
+
+# --- Fuel (step 7) ---
+
+func _spend_reaction_mass(amount: float) -> void:
+	if amount <= 0.0:
+		return
+	GameState.ship.reaction_mass = maxf(0.0, GameState.ship.reaction_mass - amount)
+	EventBus.fuel_changed.emit(Fuel.Pool.REACTION_MASS, GameState.ship.reaction_mass)
+
+
+## Refuel to capacity when the ship is at a refuel-capable body (helm.md: Dock
+## enables refuelling). The full Dock/Undock flow + crew voice land in step 8.
+func _dock() -> void:
+	var body := _body_at_ship()
+	if body == null or not body.can_refuel:
+		EventBus.order_rejected.emit("ORDER_REJECT_NOT_AT_STATION")
+		return
+	GameState.ship.reaction_mass = GameState.ship.max_reaction_mass
+	EventBus.fuel_changed.emit(Fuel.Pool.REACTION_MASS, GameState.ship.reaction_mass)
+	EventBus.order_acknowledged.emit("ship", "VOICE_SHIP_DOCKED")
+
+
+## The body the ship is currently sitting at (within arrival distance), or null.
+func _body_at_ship() -> BodyData:
+	var system := TypeRegistry.get_system(GameState.system.system_id)
+	if system == null:
+		return null
+	for body: BodyData in system.bodies:
+		if FlightCore.has_arrived(GameState.ship.position, body.position):
+			return body
+	return null
 
 
 # --- Lifecycle ---

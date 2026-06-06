@@ -18,12 +18,14 @@ func test_ship_state_round_trip() -> void:
 	s.position = Vector2(12.5, -3.0)
 	s.heading = 2.0
 	s.reaction_mass = 42.0
+	s.max_reaction_mass = 120.0
 	s.current_order = {"type": "course", "target_id": "station_alpha", "burn": 1}
 	var back := ShipState.from_dict(s.to_dict())
 	assert_eq(back.hull_id, "courier")
 	assert_eq(back.position, Vector2(12.5, -3.0))
 	assert_almost_eq(back.heading, 2.0, 0.0001)
 	assert_almost_eq(back.reaction_mass, 42.0, 0.0001)
+	assert_almost_eq(back.max_reaction_mass, 120.0, 0.0001)
 	assert_eq(back.current_order.get("target_id"), "station_alpha")
 
 
