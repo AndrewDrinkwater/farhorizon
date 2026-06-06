@@ -10,15 +10,15 @@ first open Godot will:
 If GUT isn't already enabled: **Project → Project Settings → Plugins → enable
 "Gut"**. (It's pre-enabled in `project.godot`, but the toggle confirms it.)
 
-## 2. Localisation (one-time, needs the editor)
-The string table is `localization/strings.csv`. Godot imports CSVs as
-translations automatically. After first import, register the locale:
-**Project → Project Settings → Localization → Translations → Add** →
-`localization/strings.en.translation`.
+## 2. Localisation
+The string table is `localization/strings.csv`; Godot imports it to
+`localization/strings.en.translation` automatically. The locale is **already
+registered** in `project.godot` (`[internationalization]`), so `tr("KEY")` works
+out of the box (e.g. `tr("HELM_LAY_IN_COURSE")`).
 
-After that, any UI text uses `tr("KEY")` (e.g. `tr("HELM_LAY_IN_COURSE")`).
-English is the only locale for now; adding a language = adding a column to the
-CSV (ADR 0010).
+If you **edit the CSV outside the editor**, regenerate the compiled translation
+with an import pass: `godot --headless --import`. English is the only locale for
+now; adding a language = adding a column to the CSV (ADR 0010).
 
 ## 3. Run
 Press **Play** (F5). The scaffold scene prints a boot line and shows a label —
@@ -31,6 +31,7 @@ this just proves the six autoloads load and the project boots.
   ```
   godot --headless -s addons/gut/gut_cmdln.gd -gconfig=.gutconfig.json
   ```
+  (On PowerShell, quote the config arg: `"-gconfig=.gutconfig.json"`.)
 
 ## 5. Remote
 The git remote (`origin`) is already configured. Push as normal:

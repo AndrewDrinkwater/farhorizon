@@ -4,6 +4,46 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — Session 2: Gate + SimClock tick loop (α0.1 build-order step 2)
+
+First real compile/run of the scaffold, then the discrete clock.
+
+**Gate (step 1 verification).** Ran the project headless in Godot 4.6.2 (mono).
+The scaffold compiled and the smoke test passed **4/4** untouched — no scaffold
+fixes needed. Only wrinkle was the run command itself: on PowerShell the GUT
+`-gconfig=...` arg must be quoted (`"-gconfig=.gutconfig.json"`) or Godot sees
+`Unknown arguments`.
+
+**SimClock (step 2).**
+- **Pure tick math in `src/core`** (ADR 0004): `ClockMath` accumulates
+  speed-scaled real time and returns whole ticks (sub-tick remainder preserved
+  across frames; speed 0 freezes with no lost progress). `SimCalendar` derives
+  day/hour from the tick count. Both node-free and GUT-tested.
+- **`SimClock` node** is now a thin shell: drives `ClockMath` in `_process`,
+  emits `EventBus.sim_tick(tick)`. Speed `0/1/2/4×` via `set_speed` /
+  `speed_up` / `speed_down` / `toggle_pause`, wired to the `sim_pause`,
+  `sim_speed_up`, `sim_speed_down` actions. Boots at `default_sim_speed`.
+- **Window-focus auto-pause** (CONVENTIONS.md, the one allowed auto-pause):
+  pauses on `NOTIFICATION_APPLICATION_FOCUS_OUT`, restores the prior speed on
+  focus-in, gated by `ConfigManager.pause_on_focus_loss`. A manual pause is left
+  untouched (separate flag), so focus regain doesn't un-pause the player.
+- **On-screen clock readout** (`src/ui/shell/clock_readout.gd`) — derived
+  calendar + speed, all via `tr()` keys (new `CLOCK_FORMAT/SPEED/PAUSED`).
+  **Debug overlay** (`src/ui/components/debug_overlay.gd`, ADR 0012) toggled by
+  `toggle_debug` (F1): tick / speed / sec-per-tick / FPS, read-only, debug text
+  exempt from localisation. Both hosted by the interim `main` shell.
+- **Localisation wired up**: registered `strings.en.translation` in
+  `project.godot` `[internationalization]` so `tr()` works without the manual
+  editor step (SETUP.md updated; that step is now automated).
+
+**Tests:** `test_clock_math` (9), `test_sim_calendar` (4), `test_sim_clock` (7),
+plus the smoke suite (4) — **24/24 green** headless. Main scene boots clean.
+
+**Next:** build-order step 3 — `GameState` + `SaveManager` minimal state tree
+(clock + stub ship) with a save/load round-trip (GUT: round-trip).
+
+---
+
 ## 2026-06-06 — Session 1: Project scaffold (α0.1 build-order step 1)
 
 First code. Stood up the Godot project skeleton against the plan — no gameplay
