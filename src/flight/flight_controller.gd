@@ -46,6 +46,10 @@ func _on_order_issued(order: Dictionary) -> void:
 			_all_stop()
 		"dock":
 			_dock()
+		"establish_orbit":
+			_establish_orbit()
+		"break_orbit":
+			_break_orbit()
 		_:
 			EventBus.order_rejected.emit("ORDER_REJECT_UNKNOWN")
 
@@ -67,7 +71,7 @@ func _set_course(order: Dictionary) -> void:
 		"origin": GameState.ship.position,
 	}
 	_set_state(FlightCore.State.COURSE_SET)
-	EventBus.order_acknowledged.emit("ship", "VOICE_SHIP_COURSE_LAID_IN")
+	_acknowledge("VOICE_SHIP_COURSE_LAID_IN")
 
 
 func _engage() -> void:
@@ -89,13 +93,38 @@ func _engage() -> void:
 	order["origin"] = GameState.ship.position
 	# ENGAGING is the brief acknowledgment beat; the first tick starts the burn.
 	_set_state(FlightCore.State.ENGAGING)
-	EventBus.order_acknowledged.emit("ship", "VOICE_SHIP_COURSE_LAID_IN")
+	_acknowledge("VOICE_SHIP_COURSE_LAID_IN")
 
 
 func _all_stop() -> void:
 	GameState.ship.current_order = {}
 	_set_state(FlightCore.State.IDLE)
-	EventBus.order_acknowledged.emit("ship", "VOICE_SHIP_ALL_STOP")
+	_acknowledge("VOICE_SHIP_ALL_STOP")
+
+
+## Establish orbit at the body the ship is sitting at (α0.1: arrival already
+## auto-orbits, so this is mainly explicit confirmation / re-entry from drift).
+func _establish_orbit() -> void:
+	if _body_at_ship() == null:
+		EventBus.order_rejected.emit("ORDER_REJECT_NOT_AT_BODY")
+		return
+	_set_state(FlightCore.State.IN_ORBIT)
+	_acknowledge("VOICE_SHIP_ORBIT_ESTABLISHED")
+
+
+## Break orbit → drift in place (no course). Clears the active order.
+func _break_orbit() -> void:
+	if _state != FlightCore.State.IN_ORBIT:
+		EventBus.order_rejected.emit("ORDER_REJECT_NOT_IN_ORBIT")
+		return
+	GameState.ship.current_order = {}
+	_set_state(FlightCore.State.IDLE)
+	_acknowledge("VOICE_SHIP_ORBIT_BROKEN")
+
+
+## Emit an acknowledgment in the voice of whoever holds the Helm post (ADR 0014).
+func _acknowledge(line_key: String) -> void:
+	EventBus.order_acknowledged.emit(CrewVoice.speaker_for("helm"), line_key)
 
 
 ## Belay = abort. Per ADR 0005, abort returns to CourseSet (the course stays laid
@@ -105,7 +134,7 @@ func _on_belay() -> void:
 	if String(order.get("type", "")) == "course":
 		order["engaged"] = false
 		_set_state(FlightCore.State.COURSE_SET)
-		EventBus.order_acknowledged.emit("ship", "VOICE_SHIP_BELAYED")
+		_acknowledge("VOICE_SHIP_BELAYED")
 	else:
 		_set_state(FlightCore.State.IDLE)
 
@@ -169,7 +198,7 @@ func _dock() -> void:
 		return
 	GameState.ship.reaction_mass = GameState.ship.max_reaction_mass
 	EventBus.fuel_changed.emit(Fuel.Pool.REACTION_MASS, GameState.ship.reaction_mass)
-	EventBus.order_acknowledged.emit("ship", "VOICE_SHIP_DOCKED")
+	_acknowledge("VOICE_SHIP_DOCKED")
 
 
 ## The body the ship is currently sitting at (within arrival distance), or null.
