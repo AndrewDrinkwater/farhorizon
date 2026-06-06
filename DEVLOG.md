@@ -4,6 +4,18 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — Holding = orbiting (ship circles the body)
+
+Gave "holding" a visual meaning: when the ship is HOLDING at a body it slowly
+circles it (and parks at the same offset when DOCKED). The orbit is cosmetic —
+the authoritative position stays at the body for logic (ADR 0004) — and advances
+on sim time, so it scales with speed and freezes when paused. Implemented in
+`ShipView` (orbit radius = body radius + gap, ~30s/orbit at 1×). Verified by
+flying to Verdant and screenshotting the ship on its orbit ring; Flight Status
+reads "Holding: Verdant". 82/82 tests still green.
+
+---
+
 ## 2026-06-06 — Travel pipeline: location / course / context orders (ADR 0015)
 
 Reworked travel so available orders are derived from the ship's situation, not
