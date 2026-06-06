@@ -39,6 +39,10 @@ project/assembly_name="Far Horizon"
 
 enabled=PackedStringArray("res://addons/gut/plugin.cfg")
 
+[internationalization]
+
+locale/translations=PackedStringArray("res://localization/strings.en.translation")
+
 [input]
 
 sim_pause={

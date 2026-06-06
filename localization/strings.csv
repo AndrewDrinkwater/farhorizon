@@ -2,6 +2,9 @@ keys,en
 APP_TITLE,Far Horizon
 HUD_REACTION_MASS,Reaction Mass
 HUD_CLOCK,Mission Clock
+CLOCK_FORMAT,Day {day} · {hour}:00
+CLOCK_SPEED,{speed}x
+CLOCK_PAUSED,PAUSED
 HELM_CONSOLE_NAME,Helm
 HELM_LAY_IN_COURSE,Lay In Course
 HELM_ENGAGE,Engage
