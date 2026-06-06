@@ -4,6 +4,51 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — Session 8: The Helm console (step 8)
+
+The α0.1 spine is now played through a real captain's terminal.
+
+- **Minimal terminal theme** (ADR 0006): `Palette` (colourblind-safe Okabe–Ito
+  status colours) + `TerminalTheme` (panel/button styleboxes, default font for
+  now — Orbitron/Share Tech Mono are a later drop-in), applied once at the shell
+  root so all Controls inherit it.
+- **Config-driven component library** (ADR 0007): `TPanel`, `TButton`,
+  `TReadout`, `TGauge`, `TLight`, `TList`. They read via binding callables and
+  write only by invoking intents — never mutate state. `TLight` carries colour
+  **and** glyph **and** label (never colour alone, ADR 0012).
+- **Helm console** (`src/ui/consoles/helm_console.gd`, ADR 0013) assembled from
+  those components over the Nav Plot map:
+  - **Nav Plot:** click a body to select it as target (map emits
+    `nav_target_selected`, owns its highlight ring); retired the temporary
+    click-to-fly.
+  - **Course Order:** selected target, burn selector (Economy/Standard/Hard),
+    live ETA + RM-cost preview (with a ⚠ non-colour cue when unaffordable), and
+    the order buttons — Lay In / Engage / Belay / All Stop / Establish Orbit /
+    Dock.
+  - **Flight Status:** flight-state light (state name + glyph + colour),
+    distance + ETA to the active target, reaction-mass gauge.
+  - **Order Log:** acknowledgments + rejections, newest first.
+- **Order lifecycle** (ADR 0014): the console *composes* and *issues*;
+  `FlightController` validates → the post *acknowledges* (ship voice) → *executes*
+  over ticks → *belay* aborts. Added `CrewVoice.speaker_for(post)` — the seam the
+  crew system plugs into (α0.1: always the ship's computer). Added
+  `establish_orbit` / `break_orbit` orders. Acks/rejections flow to the Order Log.
+- **Shell** (ADR 0006): `main` now assembles the persistent shell — Nav Plot map
+  + `TimeControls` (clock + pause/1×/2×/4×, in the shell not the console) + the
+  Helm console on a themed, mouse-transparent UI layer so empty-space clicks
+  reach the map. Retired the standalone clock/fuel HUD labels (folded into the
+  time bar + flight status).
+
+**Tests:** `test_crew_voice` (2) + `test_helm_console` (5: builds clean,
+select→lay-in issues the right order, no-target no-op, burn carries into the
+order, ack logs). Whole suite **70/70 green** headless; full shell boots clean.
+
+**Next:** build-order step 9 — polish + feel pass (tick rate, burn costs, camera
+zoom range + fit-to-system, clarity), confirm all α0.1 done-criteria, and the
+scale-tuning debt. Save/load round-trip (criterion 4) is already in from step 3.
+
+---
+
 ## 2026-06-06 — Session 7: Fuel — reaction mass bites (step 7)
 
 Burns now cost reaction mass, the burn choice matters, and you can refuel.
