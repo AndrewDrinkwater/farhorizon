@@ -9,17 +9,16 @@ extends RefCounted
 ## phases derived from course progress — real accel ramps can replace them later
 ## without changing the machine's shape.
 
-## Order matches localization/strings.csv FLIGHT_STATE_* and is the int payload
-## of EventBus.flight_state_changed.
+## The ship's MOTION phase (ADR 0015 separates this from location + course).
+## Idle when not under way; the rest are transit phases. The int is the payload
+## of EventBus.flight_state_changed and maps to FLIGHT_STATE_* strings.
 enum State {
 	IDLE,
-	COURSE_SET,
 	ENGAGING,
 	ACCELERATING,
 	CRUISING,
 	DECELERATING,
 	ARRIVING,
-	IN_ORBIT,
 }
 
 ## Fractions of the course spent in the ramp phases (presentation only in α0.1).
@@ -31,13 +30,11 @@ const ARRIVE_DISTANCE: float = 1.0
 
 const _STATE_KEYS: Dictionary = {
 	State.IDLE: "FLIGHT_STATE_IDLE",
-	State.COURSE_SET: "FLIGHT_STATE_COURSE_SET",
 	State.ENGAGING: "FLIGHT_STATE_ENGAGING",
 	State.ACCELERATING: "FLIGHT_STATE_ACCELERATING",
 	State.CRUISING: "FLIGHT_STATE_CRUISING",
 	State.DECELERATING: "FLIGHT_STATE_DECELERATING",
 	State.ARRIVING: "FLIGHT_STATE_ARRIVING",
-	State.IN_ORBIT: "FLIGHT_STATE_IN_ORBIT",
 }
 
 
@@ -61,18 +58,19 @@ static func has_arrived(pos: Vector2, target: Vector2) -> bool:
 	return pos.distance_to(target) <= ARRIVE_DISTANCE
 
 
-## The executing phase for a ship at `pos` on a course `origin`→`target` at
-## `burn`. Phases come from progress along the course; the final tick (target
-## within one step) is ARRIVING, and reaching the target is IN_ORBIT.
+## The motion phase for a ship at `pos` on a course `origin`→`target` at `burn`.
+## Phases come from progress along the course; the final approach is ARRIVING.
+## Actually reaching the target (entering HOLDING) is the FlightController's job
+## (ADR 0015) — this only reports transit motion.
 static func executing_state(origin: Vector2, target: Vector2, pos: Vector2, burn: int) -> int:
 	var rem: float = pos.distance_to(target)
 	if rem <= ARRIVE_DISTANCE:
-		return State.IN_ORBIT
+		return State.ARRIVING
 	if rem <= FlightMath.speed_wu_per_tick(burn):
 		return State.ARRIVING
 	var total: float = origin.distance_to(target)
 	if total <= 0.0:
-		return State.IN_ORBIT
+		return State.ARRIVING
 	var progress: float = clampf((total - rem) / total, 0.0, 1.0)
 	if progress < ACCEL_FRACTION:
 		return State.ACCELERATING

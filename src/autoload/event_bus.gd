@@ -24,6 +24,9 @@ signal nav_target_selected(target_id: String)
 # --- Flight (ADR 0005) ---
 signal flight_state_changed(state: int)
 
+# --- Travel situation (ADR 0015) — location/course changed; UI re-derives orders ---
+signal ship_context_changed()
+
 # --- Fuel ---
 signal fuel_changed(pool: int, value: float)
 
