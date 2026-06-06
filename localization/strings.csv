@@ -52,6 +52,23 @@ HELM_DISTANCE_FORMAT,{wu} wu
 HELM_RM_FORMAT,{rm} RM
 ORDER_REJECT_NOT_AT_BODY,Unable — not at a body.
 ORDER_REJECT_NOT_IN_ORBIT,Unable — not in orbit.
+ORDER_REJECT_UNDERWAY,Unable — already under way.
+ORDER_REJECT_NOT_UNDERWAY,Unable — not under way.
+ORDER_REJECT_ALREADY_HERE,Unable — already there.
+ORDER_REJECT_DOCKED,Unable — undock first.
+ORDER_REJECT_NOT_DOCKED,Unable — not docked.
+ORDER_REJECT_NOT_HOLDING,Unable — not in a holding area.
+VOICE_SHIP_ARRIVED,Arrived. Holding station.
+VOICE_SHIP_UNDOCKED,Undocked. Holding station.
+HELM_UNDOCK,Undock
+TRAVEL_DEEP_SPACE,Deep Space
+TRAVEL_HOLDING,Holding
+TRAVEL_DOCKED,Docked
+TRAVEL_HOLDING_AT,Holding: {body}
+TRAVEL_DOCKED_AT,Docked: {body}
+TRAVEL_COURSE_LAID_IN,Course laid in
+TRAVEL_DRIFTING,Drifting
+TRAVEL_BOUND_FOR,{phase} → {body}
 TIME_PAUSE,❚❚
 ORDER_REJECT_TARGET_UNKNOWN,Unable — unknown target.
 ORDER_REJECT_NO_COURSE,Unable — no course laid in.

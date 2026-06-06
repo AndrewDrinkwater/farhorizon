@@ -35,12 +35,18 @@ func _process(_delta: float) -> void:
 	if not visible:
 		return
 	var pos := GameState.ship.position
+	var loc_names := ["DEEP_SPACE", "HOLDING", "DOCKED"]
+	var loc := GameState.ship.location
+	var loc_text: String = loc_names[loc] if loc >= 0 and loc < loc_names.size() else str(loc)
+	if GameState.ship.location_body_id != "":
+		loc_text += " @ " + GameState.ship.location_body_id
 	_label.text = "\n".join([
 		"DEBUG OVERLAY  (F3 to toggle)",
 		"tick:      %d" % SimClock.get_tick(),
 		"speed:     %.1fx%s" % [SimClock.get_speed(), "  (paused)" if SimClock.is_paused() else ""],
 		"sec/tick:  %.2f" % SimClock.SECONDS_PER_TICK,
-		"flight:    %s" % tr(FlightCore.state_key(_flight_state)),
+		"motion:    %s" % tr(FlightCore.state_key(_flight_state)),
+		"location:  %s" % loc_text,
 		"ship pos:  (%.0f, %.0f) wu" % [pos.x, pos.y],
 		"reaction:  %.1f RM" % GameState.ship.reaction_mass,
 		"fps:       %d" % Engine.get_frames_per_second(),

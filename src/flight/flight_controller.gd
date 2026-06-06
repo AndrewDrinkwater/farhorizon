@@ -1,14 +1,13 @@
 class_name FlightController
 extends Node
-## Drives the ship along its course on SimClock ticks (ADR 0004/0005) and is the
-## system side of the Helm order lifecycle (ADR 0014): it validates orders off
-## EventBus, executes them over ticks, writes GameState.ship, and announces
-## flight_state_changed. It holds no reference to other systems (ADR 0003) — it
-## talks via EventBus and reads services (GameState, TypeRegistry).
+## System side of the travel pipeline (ADR 0005/0014/0015). It validates orders
+## off EventBus against the ship's situation, applies the location/course/motion
+## transitions, drives the ship along its course on SimClock ticks, and announces
+## changes. Holds no reference to other systems (ADR 0003) — talks via EventBus,
+## reads services (GameState, TypeRegistry).
 ##
-## The authoritative course lives in ShipState.current_order so a mid-flight save
-## resumes (ADR 0014); the transient ack beat (ENGAGING) is not saved — on load
-## the ship resumes directly in its executing phase.
+## The situation lives in ShipState (location, location_body_id, current_order) so
+## a save restores it; motion is recomputed on load (the ack beat isn't saved).
 ##
 ## NOT an autoload (six only) — a plain system node placed in the scene.
 
@@ -27,13 +26,6 @@ func get_state() -> int:
 	return _state
 
 
-func _set_state(new_state: int) -> void:
-	if new_state == _state:
-		return
-	_state = new_state
-	EventBus.flight_state_changed.emit(_state)
-
-
 # --- Order intake (ADR 0014 lifecycle: issue -> acknowledge / reject -> execute) ---
 
 func _on_order_issued(order: Dictionary) -> void:
@@ -46,10 +38,8 @@ func _on_order_issued(order: Dictionary) -> void:
 			_all_stop()
 		"dock":
 			_dock()
-		"establish_orbit":
-			_establish_orbit()
-		"break_orbit":
-			_break_orbit()
+		"undock":
+			_undock()
 		_:
 			EventBus.order_rejected.emit("ORDER_REJECT_UNKNOWN")
 
@@ -57,11 +47,17 @@ func _on_order_issued(order: Dictionary) -> void:
 func _set_course(order: Dictionary) -> void:
 	var target_id := String(order.get("target_id", ""))
 	var burn := int(order.get("burn", FlightMath.Burn.STANDARD))
+	if _is_under_way():
+		EventBus.order_rejected.emit("ORDER_REJECT_UNDERWAY")
+		return
 	if _resolve_body(target_id) == null:
 		EventBus.order_rejected.emit("ORDER_REJECT_TARGET_UNKNOWN")
 		return
 	if not FlightMath.is_valid_burn(burn):
 		EventBus.order_rejected.emit("ORDER_REJECT_BURN_INVALID")
+		return
+	if target_id == GameState.ship.location_body_id and GameState.ship.location != Travel.Location.DEEP_SPACE:
+		EventBus.order_rejected.emit("ORDER_REJECT_ALREADY_HERE")
 		return
 	GameState.ship.current_order = {
 		"type": "course",
@@ -70,80 +66,101 @@ func _set_course(order: Dictionary) -> void:
 		"engaged": false,
 		"origin": GameState.ship.position,
 	}
-	_set_state(FlightCore.State.COURSE_SET)
 	_acknowledge("VOICE_SHIP_COURSE_LAID_IN")
+	_notify_context()
 
 
 func _engage() -> void:
-	var order: Dictionary = GameState.ship.current_order
-	if String(order.get("type", "")) != "course":
+	if not _has_course():
 		EventBus.order_rejected.emit("ORDER_REJECT_NO_COURSE")
 		return
+	if _is_under_way():
+		EventBus.order_rejected.emit("ORDER_REJECT_UNDERWAY")
+		return
+	if GameState.ship.location == Travel.Location.DOCKED:
+		EventBus.order_rejected.emit("ORDER_REJECT_DOCKED")
+		return
+	var order: Dictionary = GameState.ship.current_order
 	var body := _resolve_body(String(order.get("target_id", "")))
 	if body == null:
 		EventBus.order_rejected.emit("ORDER_REJECT_TARGET_UNKNOWN")
 		return
 	var burn := int(order.get("burn", FlightMath.Burn.STANDARD))
-	# Fuel must bite: refuse a course the tank can't complete (ADR 0005, helm.md).
+	# Fuel must bite: refuse a course the tank can't complete (ADR 0005).
 	var cost := FlightMath.rm_cost(GameState.ship.position.distance_to(body.position), burn)
 	if cost > GameState.ship.reaction_mass:
 		EventBus.order_rejected.emit("ORDER_REJECT_INSUFFICIENT_RM")
 		return
 	order["engaged"] = true
 	order["origin"] = GameState.ship.position
+	# Departing the holding area into open space.
+	GameState.ship.location = Travel.Location.DEEP_SPACE
+	GameState.ship.location_body_id = ""
 	# ENGAGING is the brief acknowledgment beat; the first tick starts the burn.
 	_set_state(FlightCore.State.ENGAGING)
 	_acknowledge("VOICE_SHIP_COURSE_LAID_IN")
+	_notify_context()
 
 
+## All Stop: halt under way and drop the course, drifting in open space.
 func _all_stop() -> void:
+	if not _is_under_way():
+		EventBus.order_rejected.emit("ORDER_REJECT_NOT_UNDERWAY")
+		return
 	GameState.ship.current_order = {}
+	GameState.ship.location = Travel.Location.DEEP_SPACE
+	GameState.ship.location_body_id = ""
 	_set_state(FlightCore.State.IDLE)
 	_acknowledge("VOICE_SHIP_ALL_STOP")
+	_notify_context()
 
 
-## Establish orbit at the body the ship is sitting at (α0.1: arrival already
-## auto-orbits, so this is mainly explicit confirmation / re-entry from drift).
-func _establish_orbit() -> void:
-	if _body_at_ship() == null:
-		EventBus.order_rejected.emit("ORDER_REJECT_NOT_AT_BODY")
-		return
-	_set_state(FlightCore.State.IN_ORBIT)
-	_acknowledge("VOICE_SHIP_ORBIT_ESTABLISHED")
-
-
-## Break orbit → drift in place (no course). Clears the active order.
-func _break_orbit() -> void:
-	if _state != FlightCore.State.IN_ORBIT:
-		EventBus.order_rejected.emit("ORDER_REJECT_NOT_IN_ORBIT")
-		return
-	GameState.ship.current_order = {}
-	_set_state(FlightCore.State.IDLE)
-	_acknowledge("VOICE_SHIP_ORBIT_BROKEN")
-
-
-## Emit an acknowledgment in the voice of whoever holds the Helm post (ADR 0014).
-func _acknowledge(line_key: String) -> void:
-	EventBus.order_acknowledged.emit(CrewVoice.speaker_for("helm"), line_key)
-
-
-## Belay = abort. Per ADR 0005, abort returns to CourseSet (the course stays laid
-## in, just no longer executing); with no course it drops to Idle.
+## Belay = abort under way, but the course stays laid in so it can be re-engaged
+## (ADR 0005/0015). Drifts in open space.
 func _on_belay() -> void:
-	var order: Dictionary = GameState.ship.current_order
-	if String(order.get("type", "")) == "course":
-		order["engaged"] = false
-		_set_state(FlightCore.State.COURSE_SET)
-		_acknowledge("VOICE_SHIP_BELAYED")
-	else:
-		_set_state(FlightCore.State.IDLE)
+	if not _is_under_way():
+		EventBus.order_rejected.emit("ORDER_REJECT_NOT_UNDERWAY")
+		return
+	GameState.ship.current_order["engaged"] = false
+	GameState.ship.location = Travel.Location.DEEP_SPACE
+	GameState.ship.location_body_id = ""
+	_set_state(FlightCore.State.IDLE)
+	_acknowledge("VOICE_SHIP_BELAYED")
+	_notify_context()
+
+
+## Dock at the station we're holding at (refuels at a can_refuel body).
+func _dock() -> void:
+	if GameState.ship.location != Travel.Location.HOLDING:
+		EventBus.order_rejected.emit("ORDER_REJECT_NOT_HOLDING")
+		return
+	var body := _resolve_body(GameState.ship.location_body_id)
+	if body == null or not body.can_dock:
+		EventBus.order_rejected.emit("ORDER_REJECT_NOT_AT_STATION")
+		return
+	GameState.ship.location = Travel.Location.DOCKED
+	if body.can_refuel:
+		GameState.ship.reaction_mass = GameState.ship.max_reaction_mass
+		EventBus.fuel_changed.emit(Fuel.Pool.REACTION_MASS, GameState.ship.reaction_mass)
+	_acknowledge("VOICE_SHIP_DOCKED")
+	_notify_context()
+
+
+## Undock back to the station's holding area.
+func _undock() -> void:
+	if GameState.ship.location != Travel.Location.DOCKED:
+		EventBus.order_rejected.emit("ORDER_REJECT_NOT_DOCKED")
+		return
+	GameState.ship.location = Travel.Location.HOLDING
+	_acknowledge("VOICE_SHIP_UNDOCKED")
+	_notify_context()
 
 
 # --- Execution (one step per SimClock tick) ---
 
 func _on_sim_tick(_tick: int) -> void:
 	var order: Dictionary = GameState.ship.current_order
-	if String(order.get("type", "")) != "course" or not bool(order.get("engaged", false)):
+	if not _is_under_way():
 		return
 	var body := _resolve_body(String(order.get("target_id", "")))
 	if body == null:
@@ -152,7 +169,7 @@ func _on_sim_tick(_tick: int) -> void:
 	var burn := int(order.get("burn", FlightMath.Burn.STANDARD))
 
 	if FlightCore.has_arrived(GameState.ship.position, target):
-		_arrive(target)
+		_arrive(body)
 		return
 
 	var prev_pos: Vector2 = GameState.ship.position
@@ -166,21 +183,24 @@ func _on_sim_tick(_tick: int) -> void:
 	_spend_reaction_mass(FlightMath.rm_cost(prev_pos.distance_to(new_pos), burn))
 
 	if FlightCore.has_arrived(new_pos, target):
-		_arrive(target)
+		_arrive(body)
 	else:
 		var origin: Vector2 = order.get("origin", new_pos)
 		_set_state(FlightCore.executing_state(origin, target, new_pos, burn))
 
 
-func _arrive(target: Vector2) -> void:
-	GameState.ship.position = target
-	# Course complete: stop executing but keep the order so we know which body
-	# we're holding at (and so a save records the orbit).
-	GameState.ship.current_order["engaged"] = false
-	_set_state(FlightCore.State.IN_ORBIT)
+## Arrival: settle into the target's holding area; the course is complete.
+func _arrive(body: BodyData) -> void:
+	GameState.ship.position = body.position
+	GameState.ship.location = Travel.Location.HOLDING
+	GameState.ship.location_body_id = body.id
+	GameState.ship.current_order = {}
+	_set_state(FlightCore.State.IDLE)
+	_acknowledge("VOICE_SHIP_ARRIVED")
+	_notify_context()
 
 
-# --- Fuel (step 7) ---
+# --- Fuel ---
 
 func _spend_reaction_mass(amount: float) -> void:
 	if amount <= 0.0:
@@ -189,50 +209,49 @@ func _spend_reaction_mass(amount: float) -> void:
 	EventBus.fuel_changed.emit(Fuel.Pool.REACTION_MASS, GameState.ship.reaction_mass)
 
 
-## Refuel to capacity when the ship is at a refuel-capable body (helm.md: Dock
-## enables refuelling). The full Dock/Undock flow + crew voice land in step 8.
-func _dock() -> void:
-	var body := _body_at_ship()
-	if body == null or not body.can_refuel:
-		EventBus.order_rejected.emit("ORDER_REJECT_NOT_AT_STATION")
+# --- Situation helpers ---
+
+func _is_under_way() -> bool:
+	return bool(GameState.ship.current_order.get("engaged", false))
+
+
+func _has_course() -> bool:
+	return String(GameState.ship.current_order.get("type", "")) == "course"
+
+
+func _set_state(new_state: int) -> void:
+	if new_state == _state:
 		return
-	GameState.ship.reaction_mass = GameState.ship.max_reaction_mass
-	EventBus.fuel_changed.emit(Fuel.Pool.REACTION_MASS, GameState.ship.reaction_mass)
-	_acknowledge("VOICE_SHIP_DOCKED")
+	_state = new_state
+	EventBus.flight_state_changed.emit(_state)
 
 
-## The body the ship is currently sitting at (within arrival distance), or null.
-func _body_at_ship() -> BodyData:
-	var system := TypeRegistry.get_system(GameState.system.system_id)
-	if system == null:
-		return null
-	for body: BodyData in system.bodies:
-		if FlightCore.has_arrived(GameState.ship.position, body.position):
-			return body
-	return null
+func _acknowledge(line_key: String) -> void:
+	EventBus.order_acknowledged.emit(CrewVoice.speaker_for("helm"), line_key)
+
+
+## Tell the UI the ship's situation changed so it re-derives status + orders.
+func _notify_context() -> void:
+	EventBus.ship_context_changed.emit()
 
 
 # --- Lifecycle ---
 
-## Recompute the flight state from the loaded order + geometry (transient ack
-## beat is not persisted; resume directly in the executing phase).
+## Recompute motion from the loaded course (location is restored from the save;
+## the transient ack beat is not persisted — resume directly in the transit phase).
 func _resync_after_load() -> void:
-	var order: Dictionary = GameState.ship.current_order
-	if String(order.get("type", "")) != "course":
+	if not _is_under_way():
 		_set_state(FlightCore.State.IDLE)
-		return
-	var body := _resolve_body(String(order.get("target_id", "")))
-	if body == null:
-		_set_state(FlightCore.State.IDLE)
-		return
-	if FlightCore.has_arrived(GameState.ship.position, body.position):
-		_set_state(FlightCore.State.IN_ORBIT)
-	elif not bool(order.get("engaged", false)):
-		_set_state(FlightCore.State.COURSE_SET)
 	else:
-		var origin: Vector2 = order.get("origin", GameState.ship.position)
-		_set_state(FlightCore.executing_state(origin, body.position, GameState.ship.position,
-			int(order.get("burn", FlightMath.Burn.STANDARD))))
+		var order: Dictionary = GameState.ship.current_order
+		var body := _resolve_body(String(order.get("target_id", "")))
+		if body == null:
+			_set_state(FlightCore.State.IDLE)
+		else:
+			var origin: Vector2 = order.get("origin", GameState.ship.position)
+			_set_state(FlightCore.executing_state(origin, body.position, GameState.ship.position,
+				int(order.get("burn", FlightMath.Burn.STANDARD))))
+	_notify_context()
 
 
 func _resolve_body(target_id: String) -> BodyData:

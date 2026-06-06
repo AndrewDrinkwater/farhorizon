@@ -36,18 +36,18 @@ func test_phase_progression_along_course() -> void:
 		FlightCore.State.DECELERATING, "late course = decelerating")
 
 
-func test_phase_arriving_then_in_orbit() -> void:
+func test_phase_final_approach_is_arriving() -> void:
 	var origin := Vector2.ZERO
 	var target := Vector2(1000.0, 0.0)
 	var sp := FlightMath.speed_wu_per_tick(STD)
-	# One step out → arriving.
+	# Within one step of the target → arriving (entering HOLDING is the
+	# controller's job once actually arrived, ADR 0015).
 	assert_eq(FlightCore.executing_state(origin, target, Vector2(1000.0 - sp * 0.5, 0.0), STD),
 		FlightCore.State.ARRIVING, "final approach = arriving")
-	# On the target → in orbit.
 	assert_eq(FlightCore.executing_state(origin, target, target, STD),
-		FlightCore.State.IN_ORBIT, "reached target = in orbit")
+		FlightCore.State.ARRIVING, "on the target = arriving (motion)")
 
 
 func test_state_key_maps_to_translation_keys() -> void:
 	assert_eq(FlightCore.state_key(FlightCore.State.CRUISING), "FLIGHT_STATE_CRUISING")
-	assert_eq(FlightCore.state_key(FlightCore.State.IN_ORBIT), "FLIGHT_STATE_IN_ORBIT")
+	assert_eq(FlightCore.state_key(FlightCore.State.ENGAGING), "FLIGHT_STATE_ENGAGING")

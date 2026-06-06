@@ -5,8 +5,9 @@ extends Control
 ## over the persistent Nav Plot map. It composes orders and issues them on
 ## EventBus (ADR 0014) — it never mutates state; it reads GameState for display.
 ##
-## Regions: Course Order (compose + issue), Flight Status (live readouts), Order
-## Log (acknowledgments / rejections). Time controls live in the shell, not here.
+## Available orders are derived from the ship's situation (ADR 0015): the buttons
+## enable/disable via Travel.available, so only context-appropriate orders can be
+## given. Status reads location + course + motion.
 
 const POST: String = "helm"
 
@@ -21,6 +22,7 @@ var _distance_readout: TReadout
 var _eta_readout: TReadout
 var _rm_readout: TReadout
 var _burn_buttons: Dictionary = {}  # burn:int -> TButton
+var _action_buttons: Dictionary = {}  # order id:String -> TButton
 
 # Flight Status widgets
 var _status_light: TLight
@@ -46,8 +48,7 @@ func _ready() -> void:
 	_build_flight_status()
 	_build_order_log()
 	_connect_bus()
-	_refresh_preview()
-	_refresh_status()
+	_refresh_all()
 
 
 # --- Layout helpers ---
@@ -104,18 +105,24 @@ func _build_course_order() -> void:
 	var row1 := HBoxContainer.new()
 	row1.add_theme_constant_override("separation", 4)
 	c.add_child(row1)
-	row1.add_child(TButton.new().setup("HELM_LAY_IN_COURSE", _lay_in_course))
-	row1.add_child(TButton.new().setup("HELM_ENGAGE", _engage))
-	row1.add_child(TButton.new().setup("HELM_BELAY", _belay))
+	row1.add_child(_make_action("lay_in", "HELM_LAY_IN_COURSE", _lay_in_course))
+	row1.add_child(_make_action("engage", "HELM_ENGAGE", _engage))
+	row1.add_child(_make_action("belay", "HELM_BELAY", _belay))
 
 	var row2 := HBoxContainer.new()
 	row2.add_theme_constant_override("separation", 4)
 	c.add_child(row2)
-	row2.add_child(TButton.new().setup("HELM_ALL_STOP", _all_stop))
-	row2.add_child(TButton.new().setup("HELM_ESTABLISH_ORBIT", _establish_orbit))
-	row2.add_child(TButton.new().setup("HELM_DOCK", _dock))
+	row2.add_child(_make_action("all_stop", "HELM_ALL_STOP", _all_stop))
+	row2.add_child(_make_action("dock", "HELM_DOCK", _dock))
+	row2.add_child(_make_action("undock", "HELM_UNDOCK", _undock))
 
 	_refresh_burn_buttons()
+
+
+func _make_action(id: String, label_key: String, on_press: Callable) -> TButton:
+	var button := TButton.new().setup(label_key, on_press)
+	_action_buttons[id] = button
+	return button
 
 
 # --- Flight Status region (live readouts) ---
@@ -153,16 +160,18 @@ func _build_order_log() -> void:
 func _connect_bus() -> void:
 	EventBus.nav_target_selected.connect(_on_target_selected)
 	EventBus.flight_state_changed.connect(_on_flight_state_changed)
+	EventBus.ship_context_changed.connect(_refresh_all)
 	EventBus.sim_tick.connect(_on_tick.unbind(1))
 	EventBus.fuel_changed.connect(_on_fuel_changed)
 	EventBus.order_acknowledged.connect(_on_order_acknowledged)
 	EventBus.order_rejected.connect(_on_order_rejected)
-	EventBus.game_state_loaded.connect(_on_state_loaded)
+	EventBus.game_state_loaded.connect(_refresh_all)
 
 
 func _on_target_selected(target_id: String) -> void:
 	_target_id = target_id
 	_refresh_preview()
+	_refresh_actions()
 
 
 func _on_flight_state_changed(state: int) -> void:
@@ -187,12 +196,6 @@ func _on_order_acknowledged(speaker_key: String, line_key: String) -> void:
 
 func _on_order_rejected(reason_key: String) -> void:
 	_log(CrewVoice.SHIP_VOICE, reason_key)
-
-
-func _on_state_loaded() -> void:
-	_fuel_gauge.refresh()
-	_refresh_preview()
-	_refresh_status()
 
 
 # --- Compose actions (burn + order buttons) ---
@@ -221,19 +224,47 @@ func _all_stop() -> void:
 	EventBus.order_issued.emit({"type": "all_stop"})
 
 
-func _establish_orbit() -> void:
-	EventBus.order_issued.emit({"type": "establish_orbit"})
-
-
 func _dock() -> void:
 	EventBus.order_issued.emit({"type": "dock"})
 
 
+func _undock() -> void:
+	EventBus.order_issued.emit({"type": "undock"})
+
+
 # --- Refresh ---
+
+func _refresh_all() -> void:
+	_refresh_preview()
+	_refresh_status()
+	_refresh_actions()
+	_fuel_gauge.refresh()
+
 
 func _refresh_burn_buttons() -> void:
 	for burn: int in _burn_buttons:
 		_burn_buttons[burn].modulate = Palette.ACCENT if burn == _burn else Color.WHITE
+
+
+## Enable only the orders that are legal right now (ADR 0015).
+func _refresh_actions() -> void:
+	var available := Travel.available(_context())
+	for id: String in _action_buttons:
+		_action_buttons[id].disabled = not bool(available.get(id, false))
+
+
+func _context() -> Dictionary:
+	var ship: ShipState = GameState.ship
+	var location_body := _resolve_body(ship.location_body_id)
+	return {
+		"location": ship.location,
+		"location_can_dock": location_body != null and location_body.can_dock,
+		"in_transit": _in_transit(),
+		"has_course": _has_course(),
+		"nav_target_id": _target_id,
+		"nav_target_is_here": _target_id != "" and _target_id == ship.location_body_id \
+			and ship.location != Travel.Location.DEEP_SPACE,
+	}
 
 
 func _refresh_preview() -> void:
@@ -256,21 +287,43 @@ func _refresh_preview() -> void:
 
 
 func _refresh_status() -> void:
-	var visual := _state_visual(_flight_state)
-	_status_light.set_state(visual[0], visual[1], tr(FlightCore.state_key(_flight_state)))
+	var visual := _status_visual()
+	_status_light.set_state(visual[0], visual[1], visual[2])
 
-	var order: Dictionary = GameState.ship.current_order
-	var body := _resolve_body(String(order.get("target_id", "")))
+	var body := _resolve_body(String(GameState.ship.current_order.get("target_id", "")))
 	if body == null:
 		_status_distance.set_value("—")
 		_status_eta.set_value("—")
 		return
 	var dist: float = GameState.ship.position.distance_to(body.position)
 	_status_distance.set_value(_format_distance(dist))
-	if bool(order.get("engaged", false)):
-		_status_eta.set_value(_format_eta(FlightMath.eta_ticks(dist, int(order.get("burn", _burn)))))
+	if _in_transit():
+		_status_eta.set_value(_format_eta(FlightMath.eta_ticks(dist,
+			int(GameState.ship.current_order.get("burn", _burn)))))
 	else:
 		_status_eta.set_value("—")
+
+
+## [colour, glyph, text] for the current situation. Glyph + text are the
+## non-colour channels (ADR 0012).
+func _status_visual() -> Array:
+	var ship: ShipState = GameState.ship
+	if _in_transit():
+		var body := _resolve_body(String(ship.current_order.get("target_id", "")))
+		var bound := tr("TRAVEL_BOUND_FOR").format({
+			"phase": tr(FlightCore.state_key(_flight_state)),
+			"body": tr(body.name_key) if body != null else "",
+		})
+		return [Palette.STATUS_NOMINAL, "»", bound]
+	match ship.location:
+		Travel.Location.DOCKED:
+			return [Palette.STATUS_INFO, "⚓", tr("TRAVEL_DOCKED_AT").format({"body": _location_name()})]
+		Travel.Location.HOLDING:
+			return [Palette.STATUS_INFO, "◎", tr("TRAVEL_HOLDING_AT").format({"body": _location_name()})]
+		_:
+			if _has_course():
+				return [Palette.STATUS_INFO, "▷", tr("TRAVEL_COURSE_LAID_IN")]
+			return [Palette.STATUS_IDLE, "○", tr("TRAVEL_DRIFTING")]
 
 
 func _fuel_data() -> Dictionary:
@@ -282,6 +335,19 @@ func _fuel_data() -> Dictionary:
 
 
 # --- Helpers ---
+
+func _in_transit() -> bool:
+	return bool(GameState.ship.current_order.get("engaged", false))
+
+
+func _has_course() -> bool:
+	return String(GameState.ship.current_order.get("type", "")) == "course"
+
+
+func _location_name() -> String:
+	var body := _resolve_body(GameState.ship.location_body_id)
+	return tr(body.name_key) if body != null else ""
+
 
 func _log(speaker_key: String, line_key: String) -> void:
 	_order_log.add_record(tr("LOG_LINE_FORMAT").format({
@@ -299,20 +365,6 @@ func _format_eta(ticks: int) -> String:
 
 func _format_rm(rm: float) -> String:
 	return tr("HELM_RM_FORMAT").format({"rm": "%.1f" % rm})
-
-
-## Colour + glyph for a flight state. The glyph + the state name (set alongside)
-## are the non-colour channels (ADR 0012).
-func _state_visual(state: int) -> Array:
-	match state:
-		FlightCore.State.IDLE:
-			return [Palette.STATUS_IDLE, "○"]
-		FlightCore.State.COURSE_SET:
-			return [Palette.STATUS_INFO, "▷"]
-		FlightCore.State.IN_ORBIT:
-			return [Palette.STATUS_INFO, "◎"]
-		_:
-			return [Palette.STATUS_NOMINAL, "»"]  # any executing phase
 
 
 func _resolve_body(target_id: String) -> BodyData:
