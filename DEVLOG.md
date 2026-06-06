@@ -4,6 +4,17 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — Standard burn = Warp 1 (light speed)
+
+Per the captain: Standard cruise is now **Warp 1 = c**, so 1 AU (8 light-minutes)
+takes 8 in-game minutes = 8 real seconds at 1×. The burns now straddle light
+speed — Economy 0.5c (slow sub-light), Standard 1c, Hard 2c — superseding the
+earlier 2.5/4/6× set (which had Economy above Standard once Standard became 1c).
+Distances/fuel unchanged (RM is per-wu). Verified 1 AU @ Standard = 8 ticks.
+85/85 green.
+
+---
+
 ## 2026-06-06 — Nav Plot chart aids (true scale, readable)
 
 True AU scale spans 40×, so the inner planets crowded at any whole-system zoom

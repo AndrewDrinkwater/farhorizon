@@ -19,12 +19,14 @@ enum Burn { ECONOMY, STANDARD, HARD }
 ## WU_PER_AU / LIGHT_MINUTES_PER_AU.
 const LIGHT_MINUTES_PER_AU: float = 8.0
 
-## Each burn's warp factor (multiple of light speed). Economy is the slow cruise
-## (2.5× c); Standard/Hard scale up. Speeds derive from these — tuning knobs.
+## Each burn's warp factor (multiple of light speed). Standard cruise is Warp 1 =
+## light speed (so 1 AU = 8 ticks = 8 in-game minutes = 8 real seconds at 1×);
+## Economy is the slow, fuel-efficient sub-light burn and Hard is the fast FTL
+## burn. Speeds derive from these — tuning knobs.
 const _WARP_FACTOR: Dictionary = {
-	Burn.ECONOMY: 2.5,
-	Burn.STANDARD: 4.0,
-	Burn.HARD: 6.0,
+	Burn.ECONOMY: 0.5,
+	Burn.STANDARD: 1.0,
+	Burn.HARD: 2.0,
 }
 
 ## Reaction mass (RM) spent per world unit travelled. Tuned (against the AU-scale
