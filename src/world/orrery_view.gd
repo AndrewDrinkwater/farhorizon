@@ -198,7 +198,7 @@ func _marker_px(kind: int) -> float:
 # --- Input (screen-space pick) ---
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _system == null:
+	if not visible or _system == null:
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		var target := _body_at(get_viewport().get_mouse_position())

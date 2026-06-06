@@ -4,6 +4,23 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — Build: tactical scope (α0.2 step 8)
+
+Added the tactical scope — the radar to the orrery's chart plotter. `TacticalView`
+is a ship-centred, **true-scale** screen-space view: the sensor range as a real
+circle (+ a half-range guide), bodies at true local proportions, detected
+contacts inside the circle, and the course as a straight true line. Toggled with
+the orrery via the new `toggle_tactical` action (**T**); the hidden view ignores
+input and idle-redraw. Verified by screenshot (ship-centred circle, Sol/Verdant/
+Cinder at true scale, Kepri inside). 103/103 green.
+
+**Trim:** the focus-a-body moon sub-view (step 7) is deferred to α0.3 — with the
+moon clustered ~36 px off its parent on the orrery it's already directly
+clickable/targetable, so the sub-view isn't needed yet. α0.2 nav slice is
+otherwise complete bar a formal feel pass.
+
+---
+
 ## 2026-06-06 — Build: orrery Nav Plot + moons + sensor contacts (α0.2 steps 1-6)
 
 Built the navigation slice through contacts. Core first, tested, then the render.
