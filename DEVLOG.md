@@ -4,6 +4,33 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — Session 5: Flight ETA/fuel math (step 5)
+
+The time-vs-fuel model, as pure tested logic before any flight node exists.
+
+- **`FlightMath`** (`src/core/flight_math.gd`, node-free, GUT-tested) — the
+  canonical owner of the **`Burn` enum** (Economy / Standard / Hard, used by
+  Helm + FlightController later) plus: `distance`, `eta_ticks` (ceil — a partial
+  tick still costs a tick), `rm_cost` (reaction mass, linear in distance), and a
+  `preview()` that bundles distance + ETA + RM + affordability for the Helm
+  course plot.
+- **Model (α0.1, deliberately simple, ADR 0005):** straight-line course at a
+  fixed per-burn cruise speed; RM spent per world-unit. Higher burn = faster but
+  dearer per wu — the real lever. Speeds (60/120/240 wu/tick) and RM rates
+  (0.020/0.035/0.060 per wu) are **tuning constants** (CONVENTIONS.md), expected
+  to shift at the step-9 feel pass and likely to move onto per-hull authored data
+  later. (See the scale/tuning notes — distances are in wu, scale-agnostic.)
+
+**Tests:** `test_flight_math` (9) asserts the tradeoff holds (higher burn →
+fewer ticks, more RM), ceil rounding, linear fuel scaling, zero-distance
+free/instant, preview bundling + insufficient-fuel flag — all independent of the
+exact numbers. Whole suite **46/46 green** headless.
+
+**Next:** build-order step 6 — `FlightController` state machine driving the ship
+along a course on SimClock ticks (interpolated rendering), with abort.
+
+---
+
 ## 2026-06-06 — Session 4: World + static bodies (step 4)
 
 The system is on screen: a star, planets, a station, and the ship.
