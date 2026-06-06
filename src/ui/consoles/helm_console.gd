@@ -360,7 +360,8 @@ func _format_distance(wu: float) -> String:
 
 
 func _format_eta(ticks: int) -> String:
-	return tr("HELM_ETA_FORMAT").format({"hours": ticks})
+	# A tick is one in-game minute; show ETA as Hh MMm.
+	return tr("HELM_ETA_FORMAT").format({"hours": ticks / 60, "mins": "%02d" % (ticks % 60)})
 
 
 func _format_rm(rm: float) -> String:

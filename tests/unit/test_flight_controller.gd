@@ -31,7 +31,7 @@ func _find(id: String) -> BodyData:
 func _fly_to(target_id: String, burn: int) -> void:
 	EventBus.order_issued.emit({"type": "set_course", "target_id": target_id, "burn": burn})
 	EventBus.order_issued.emit({"type": "engage"})
-	for i in range(400):
+	for i in range(2000):
 		if GameState.ship.location == Travel.Location.HOLDING:
 			return
 		EventBus.sim_tick.emit(i + 1)
@@ -63,7 +63,7 @@ func test_engage_then_fly_into_holding() -> void:
 	EventBus.sim_tick.emit(1)
 	assert_ne(_fc.get_state(), FlightCore.State.ENGAGING, "first tick begins the burn")
 
-	for i in range(200):
+	for i in range(2000):
 		if GameState.ship.location == Travel.Location.HOLDING:
 			break
 		EventBus.sim_tick.emit(i + 2)

@@ -9,9 +9,10 @@ func test_distance_is_euclidean() -> void:
 
 
 func test_eta_rounds_up() -> void:
-	# Standard = 120 wu/tick: 121 wu needs 2 ticks, 240 wu exactly 2.
-	assert_eq(FlightMath.eta_ticks(121.0, FlightMath.Burn.STANDARD), 2, "partial tick rounds up")
-	assert_eq(FlightMath.eta_ticks(240.0, FlightMath.Burn.STANDARD), 2, "exact multiple")
+	var sp := FlightMath.speed_wu_per_tick(FlightMath.Burn.STANDARD)
+	assert_eq(FlightMath.eta_ticks(sp, FlightMath.Burn.STANDARD), 1, "exactly one tick")
+	assert_eq(FlightMath.eta_ticks(sp + 0.01, FlightMath.Burn.STANDARD), 2, "partial tick rounds up")
+	assert_eq(FlightMath.eta_ticks(sp * 2.0, FlightMath.Burn.STANDARD), 2, "exact multiple")
 
 
 func test_higher_burn_is_faster() -> void:

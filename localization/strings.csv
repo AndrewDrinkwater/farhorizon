@@ -2,7 +2,7 @@ keys,en
 APP_TITLE,Far Horizon
 HUD_REACTION_MASS,Reaction Mass
 HUD_CLOCK,Mission Clock
-CLOCK_FORMAT,Day {day} · {hour}:00
+CLOCK_FORMAT,Day {day} · {hour}:{minute}
 CLOCK_SPEED,{speed}x
 CLOCK_PAUSED,PAUSED
 SYSTEM_SOL,Sol System
@@ -47,7 +47,7 @@ HELM_ETA,ETA
 HELM_RM_COST,RM Cost
 HELM_STATUS,Status
 HELM_NO_TARGET,— none —
-HELM_ETA_FORMAT,{hours} h
+HELM_ETA_FORMAT,{hours}h {mins}m
 HELM_DISTANCE_FORMAT,{wu} wu
 HELM_RM_FORMAT,{rm} RM
 ORDER_REJECT_NOT_AT_BODY,Unable — not at a body.

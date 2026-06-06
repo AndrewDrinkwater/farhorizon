@@ -7,8 +7,9 @@ meaning is ambiguous, this doc is the answer. Keep it short and current.
 
 ## Time
 
-- **Tick = the atomic unit of sim time.** One tick = **1 in-game hour**
-  (placeholder; tunable without touching logic).
+- **Tick = the atomic unit of sim time.** One tick = **1 in-game minute**
+  (tunable without touching logic). At 1× the clock runs `SECONDS_PER_TICK = 1`
+  real second per tick, so 1 real second = 1 in-game minute.
 - All time-based logic is expressed in **ticks**, never raw `delta`.
 - **Real-time mapping** is set by `SECONDS_PER_TICK` at 1× speed (a tuning
   constant, not logic). Speed multipliers: `0× / 1× / 2× / 4×`.

@@ -30,7 +30,7 @@ func _find(id: String) -> BodyData:
 func _fly_to_holding(target_id: String, burn: int) -> void:
 	EventBus.order_issued.emit({"type": "set_course", "target_id": target_id, "burn": burn})
 	EventBus.order_issued.emit({"type": "engage"})
-	for i in range(400):
+	for i in range(2000):
 		if GameState.ship.location == Travel.Location.HOLDING:
 			return
 		EventBus.sim_tick.emit(i + 1)

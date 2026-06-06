@@ -39,10 +39,6 @@ project/assembly_name="Far Horizon"
 
 enabled=PackedStringArray("res://addons/gut/plugin.cfg")
 
-[internationalization]
-
-locale/translations=PackedStringArray("res://localization/strings.en.translation")
-
 [input]
 
 sim_pause={
@@ -75,3 +71,7 @@ sim_load={
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":0,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194340,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
 ]
 }
+
+[internationalization]
+
+locale/translations=PackedStringArray("res://localization/strings.en.translation")

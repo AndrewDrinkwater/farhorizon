@@ -14,11 +14,12 @@ extends RefCounted
 ## Burn intensity — the player's control lever (Helm burn selector).
 enum Burn { ECONOMY, STANDARD, HARD }
 
-## Cruise speed in world units per tick (one tick = one in-game hour).
+## Cruise speed in world units per tick (one tick = one in-game minute). Tuned so
+## the nearest planet is a ~2.5-hour standard-burn trip against the Sol spacing.
 const _SPEED_WU_PER_TICK: Dictionary = {
-	Burn.ECONOMY: 60.0,
-	Burn.STANDARD: 120.0,
-	Burn.HARD: 240.0,
+	Burn.ECONOMY: 1.2,
+	Burn.STANDARD: 2.0,
+	Burn.HARD: 3.4,
 }
 
 ## Reaction mass (RM) spent per world unit travelled. Tuned for a "loose" tank

@@ -14,8 +14,9 @@ extends Node
 ## loss, gated by ConfigManager's pause_on_focus_loss (CONVENTIONS.md).
 
 ## Real seconds per tick at 1x speed (tuning constant, not logic). One tick = one
-## in-game hour, so 60 real s/tick means 1 real second = 1 in-game minute at 1x.
-const SECONDS_PER_TICK: float = 60.0
+## in-game MINUTE, so 1 real second = 1 in-game minute at 1x and the sim steps
+## every second (the clock and the ship update continuously, not once an hour).
+const SECONDS_PER_TICK: float = 1.0
 
 ## Allowed speed multipliers exposed at the Helm/shell (0 = paused).
 const SPEEDS: Array[float] = [0.0, 1.0, 2.0, 4.0]

@@ -45,6 +45,7 @@ func _refresh() -> void:
 	var clock_text := tr("CLOCK_FORMAT").format({
 		"day": SimCalendar.day(tick),
 		"hour": "%02d" % SimCalendar.hour(tick),
+		"minute": "%02d" % SimCalendar.minute(tick),
 	})
 	_clock.text = "%s  %s" % [tr("HUD_CLOCK"), clock_text]
 

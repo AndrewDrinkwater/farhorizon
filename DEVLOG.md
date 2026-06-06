@@ -4,6 +4,27 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — Fix: clock/ship felt frozen — tick is now 1 in-game minute
+
+The previous pass set `SECONDS_PER_TICK = 60` with tick = 1 hour, so at 1× the
+sim only stepped once per real minute: the (hours-only) clock sat still for 60s
+and the ship's first move was a minute after engaging — it read as broken.
+
+Retuned the tick unit (ADR 0004 allows it): **1 tick = 1 in-game minute**,
+`SECONDS_PER_TICK = 1` → 1 real second = 1 in-game minute, and the whole sim
+steps every second. The clock now shows `Day D · HH:MM` advancing each second;
+the ship moves every second (smoothly interpolated). Same trip/fuel feel as
+intended (nearest planet ≈ 2.5 in-game hours ≈ 2.5 min at 1×):
+- `SimCalendar` derives day / hour / minute from minute-ticks.
+- Burn speeds rescaled to wu-per-minute (1.2 / 2.0 / 3.4); RM rates unchanged
+  (cost is per-wu, so fuel feel is identical).
+- Helm ETA shows `Hh MMm`; CONVENTIONS updated.
+
+Verified on the real clock: tick increments ~1/second at 1× and the ship moves
+from engage. 85/85 green.
+
+---
+
 ## 2026-06-06 — Scale + pacing pass (deliberate, to spec)
 
 Set scale/pacing to the captain's chosen feel (was placeholder):
