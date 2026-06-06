@@ -15,6 +15,7 @@ const DEFAULT_SYSTEM_ID: String = "sol"
 
 func _ready() -> void:
 	_bootstrap_system()
+	add_child(FlightController.new())  # system side of flight; talks via EventBus
 	_build_world()
 	_build_hud()
 	add_child(DebugOverlay.new())
