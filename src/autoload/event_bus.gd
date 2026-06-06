@@ -27,6 +27,11 @@ signal flight_state_changed(state: int)
 # --- Travel situation (ADR 0015) — location/course changed; UI re-derives orders ---
 signal ship_context_changed()
 
+# --- Sensors / contacts (ADR 0017) ---
+signal contact_detected(contact_id: String)
+signal contact_lost(contact_id: String)
+signal contact_promoted(contact_id: String, tier: int)
+
 # --- Fuel ---
 signal fuel_changed(pool: int, value: float)
 

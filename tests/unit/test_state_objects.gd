@@ -36,6 +36,16 @@ func test_system_state_round_trip() -> void:
 	assert_eq(back.system_id, "sol")
 
 
+func test_contacts_state_round_trip() -> void:
+	var c := ContactsState.new()
+	c.set_tier("kepri_derelict", Sensors.Tier.BLIP)
+	c.set_tier("veil_anomaly", Sensors.Tier.IDENTIFIED)
+	var back := ContactsState.from_dict(c.to_dict())
+	assert_eq(back.tier_of("kepri_derelict"), Sensors.Tier.BLIP)
+	assert_eq(back.tier_of("veil_anomaly"), Sensors.Tier.IDENTIFIED)
+	assert_eq(back.tier_of("unknown"), Sensors.Tier.UNDETECTED, "absent = undetected")
+
+
 func test_forgiving_from_dict_uses_defaults() -> void:
 	# Empty / partial dicts must not crash and must fall back to defaults.
 	var clock := ClockState.from_dict({})

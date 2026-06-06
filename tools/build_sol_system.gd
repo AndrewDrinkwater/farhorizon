@@ -17,6 +17,10 @@ func _init() -> void:
 		Vector2.ZERO, 120.0, Color(1.0, 0.85, 0.4)))
 	bodies.append(_body("verdant", "BODY_VERDANT", BodyData.Kind.PLANET,
 		_at(1.0, 0.0), 48.0, Color(0.4, 0.78, 0.52)))      # ~Earth, 1 AU
+	var cinder := _body("cinder", "BODY_CINDER", BodyData.Kind.MOON,
+		_at(1.0, 0.0) + Vector2(0.0, 180.0), 18.0, Color(0.6, 0.55, 0.5))  # Verdant's moon
+	cinder.parent_id = "verdant"
+	bodies.append(cinder)
 	bodies.append(_body("rubicon", "BODY_RUBICON", BodyData.Kind.PLANET,
 		_at(5.2, 130.0), 56.0, Color(0.82, 0.42, 0.34)))   # ~Jupiter, 5.2 AU
 	bodies.append(_body("tethys", "BODY_TETHYS", BodyData.Kind.PLANET,
@@ -28,10 +32,20 @@ func _init() -> void:
 	station.can_refuel = true
 	bodies.append(station)
 
+	# Transient (non-gravimetric) contacts — only seen within sensor range.
+	var contacts: Array[ContactData] = []
+	contacts.append(_contact("kepri_derelict", "CONTACT_KEPRI", ContactData.Kind.DERELICT,
+		Vector2(2600.0, 900.0)))     # near the start — detected on arrival
+	contacts.append(_contact("veil_anomaly", "CONTACT_VEIL", ContactData.Kind.ANOMALY,
+		Vector2(-2200.0, 1800.0)))   # winks in flying inner-left
+	contacts.append(_contact("echo_signal", "CONTACT_ECHO", ContactData.Kind.SIGNAL,
+		Vector2(1200.0, 4200.0)))    # winks in heading outward
+
 	var system := SystemData.new()
 	system.id = "sol"
 	system.name_key = "SYSTEM_SOL"
 	system.bodies = bodies
+	system.contacts = contacts
 	system.ship_start = _at(1.0, -40.0)  # in the inner system, near Verdant
 
 	var err: int = ResourceSaver.save(system, OUT_PATH)
@@ -45,6 +59,15 @@ func _init() -> void:
 ## World position at `au` astronomical units from the star, at `degrees`.
 func _at(au: float, degrees: float) -> Vector2:
 	return Vector2.from_angle(deg_to_rad(degrees)) * au * Travel.WU_PER_AU
+
+
+func _contact(id: String, name_key: String, kind: ContactData.Kind, pos: Vector2) -> ContactData:
+	var c := ContactData.new()
+	c.id = id
+	c.name_key = name_key
+	c.kind = kind
+	c.position = pos
+	return c
 
 
 func _body(id: String, name_key: String, kind: BodyData.Kind, pos: Vector2,

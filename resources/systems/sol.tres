@@ -1,41 +1,52 @@
 [gd_resource type="Resource" script_class="SystemData" format=3]
 
-[ext_resource type="Script" path="res://src/data/body_data.gd" id="1_a4vbc"]
-[ext_resource type="Script" path="res://src/data/system_data.gd" id="2_is64w"]
+[ext_resource type="Script" path="res://src/data/body_data.gd" id="1_is64w"]
+[ext_resource type="Script" path="res://src/data/contact_data.gd" id="2_wps71"]
+[ext_resource type="Script" path="res://src/data/system_data.gd" id="3_4bpnw"]
 
-[sub_resource type="Resource" id="Resource_wps71"]
-script = ExtResource("1_a4vbc")
+[sub_resource type="Resource" id="Resource_0i7mv"]
+script = ExtResource("1_is64w")
 id = "sol_star"
 name_key = "BODY_SOL_STAR"
 kind = 0
 radius = 120.0
 tint = Color(1, 0.85, 0.4, 1)
 
-[sub_resource type="Resource" id="Resource_4bpnw"]
-script = ExtResource("1_a4vbc")
+[sub_resource type="Resource" id="Resource_sqund"]
+script = ExtResource("1_is64w")
 id = "verdant"
 name_key = "BODY_VERDANT"
 position = Vector2(1000, 0)
 radius = 48.0
 tint = Color(0.4, 0.78, 0.52, 1)
 
-[sub_resource type="Resource" id="Resource_0i7mv"]
-script = ExtResource("1_a4vbc")
+[sub_resource type="Resource" id="Resource_fnbma"]
+script = ExtResource("1_is64w")
+id = "cinder"
+name_key = "BODY_CINDER"
+kind = 3
+position = Vector2(1000, 180)
+parent_id = "verdant"
+radius = 18.0
+tint = Color(0.6, 0.55, 0.5, 1)
+
+[sub_resource type="Resource" id="Resource_nr7xj"]
+script = ExtResource("1_is64w")
 id = "rubicon"
 name_key = "BODY_RUBICON"
 position = Vector2(-3342.4956, 3983.431)
 radius = 56.0
 tint = Color(0.82, 0.42, 0.34, 1)
 
-[sub_resource type="Resource" id="Resource_sqund"]
-script = ExtResource("1_a4vbc")
+[sub_resource type="Resource" id="Resource_chn1s"]
+script = ExtResource("1_is64w")
 id = "tethys"
 name_key = "BODY_TETHYS"
 position = Vector2(-32766.082, -22943.057)
 tint = Color(0.55, 0.62, 0.82, 1)
 
-[sub_resource type="Resource" id="Resource_fnbma"]
-script = ExtResource("1_a4vbc")
+[sub_resource type="Resource" id="Resource_t5eb4"]
+script = ExtResource("1_is64w")
 id = "anchorage"
 name_key = "BODY_ANCHORAGE"
 kind = 2
@@ -45,9 +56,30 @@ tint = Color(0.78, 0.78, 0.92, 1)
 can_dock = true
 can_refuel = true
 
+[sub_resource type="Resource" id="Resource_vh70p"]
+script = ExtResource("2_wps71")
+id = "kepri_derelict"
+name_key = "CONTACT_KEPRI"
+kind = 1
+position = Vector2(2600, 900)
+
+[sub_resource type="Resource" id="Resource_4bs3o"]
+script = ExtResource("2_wps71")
+id = "veil_anomaly"
+name_key = "CONTACT_VEIL"
+kind = 2
+position = Vector2(-2200, 1800)
+
+[sub_resource type="Resource" id="Resource_pahpw"]
+script = ExtResource("2_wps71")
+id = "echo_signal"
+name_key = "CONTACT_ECHO"
+position = Vector2(1200, 4200)
+
 [resource]
-script = ExtResource("2_is64w")
+script = ExtResource("3_4bpnw")
 id = "sol"
 name_key = "SYSTEM_SOL"
-bodies = Array[ExtResource("1_a4vbc")]([SubResource("Resource_wps71"), SubResource("Resource_4bpnw"), SubResource("Resource_0i7mv"), SubResource("Resource_sqund"), SubResource("Resource_fnbma")])
+bodies = Array[ExtResource("1_is64w")]([SubResource("Resource_0i7mv"), SubResource("Resource_sqund"), SubResource("Resource_fnbma"), SubResource("Resource_nr7xj"), SubResource("Resource_chn1s"), SubResource("Resource_t5eb4")])
+contacts = Array[ExtResource("2_wps71")]([SubResource("Resource_vh70p"), SubResource("Resource_4bs3o"), SubResource("Resource_pahpw")])
 ship_start = Vector2(766.04443, -642.7876)

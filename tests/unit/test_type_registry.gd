@@ -7,8 +7,23 @@ func test_sol_system_loads() -> void:
 	var system := TypeRegistry.get_system("sol")
 	assert_not_null(system, "sol system is authored and loaded")
 	assert_eq(system.id, "sol", "id matches")
-	assert_eq(system.bodies.size(), 5, "star + 3 planets + 1 station")
+	assert_eq(system.bodies.size(), 6, "star + 3 planets + 1 station + 1 moon")
 	assert_ne(system.ship_start, Vector2.ZERO, "has a ship start position")
+
+
+func test_sol_has_a_moon_with_a_parent() -> void:
+	var system := TypeRegistry.get_system("sol")
+	var moon: BodyData = null
+	for body: BodyData in system.bodies:
+		if body.kind == BodyData.Kind.MOON:
+			moon = body
+	assert_not_null(moon, "has a moon")
+	assert_eq(moon.parent_id, "verdant", "moon orbits its parent planet")
+
+
+func test_sol_has_transient_contacts() -> void:
+	var system := TypeRegistry.get_system("sol")
+	assert_gte(system.contacts.size(), 2, "authored transient contacts present")
 
 
 func test_sol_has_star_planets_and_a_station() -> void:

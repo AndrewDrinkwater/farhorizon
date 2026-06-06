@@ -1,6 +1,6 @@
 # ADR 0018 — Hierarchical bodies: moons and parent-relative orrery
 
-**Status:** proposed (α0.2 — awaiting sign-off) · **Date:** 2026-06-06
+**Status:** accepted · **Date:** 2026-06-06
 **Builds on:** ADR 0005 (static bodies, real coords), ADR 0016 (orrery Nav Plot),
 ADR 0002 (authored data by id).
 

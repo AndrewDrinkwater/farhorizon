@@ -11,6 +11,7 @@ var position: Vector2 = Vector2.ZERO
 var heading: float = 0.0  # radians
 var reaction_mass: float = 100.0  # RM (CONVENTIONS.md "Fuel")
 var max_reaction_mass: float = 100.0  # tank capacity; refuel fills to this
+var sensor_range: float = 3000.0  # wu (~3 AU) — detection radius (ADR 0017)
 ## Where the ship is when not under way (ADR 0015). DEEP_SPACE at game start.
 var location: int = Travel.Location.DEEP_SPACE
 var location_body_id: String = ""  # body we're holding at / docked at ("" = none)
@@ -26,6 +27,7 @@ func to_dict() -> Dictionary:
 		"heading": heading,
 		"reaction_mass": reaction_mass,
 		"max_reaction_mass": max_reaction_mass,
+		"sensor_range": sensor_range,
 		"location": location,
 		"location_body_id": location_body_id,
 		"orbit_angle": orbit_angle,
@@ -41,6 +43,7 @@ static func from_dict(data: Dictionary) -> ShipState:
 	s.heading = float(data.get("heading", s.heading))
 	s.reaction_mass = float(data.get("reaction_mass", s.reaction_mass))
 	s.max_reaction_mass = float(data.get("max_reaction_mass", s.max_reaction_mass))
+	s.sensor_range = float(data.get("sensor_range", s.sensor_range))
 	s.location = int(data.get("location", s.location))
 	s.location_body_id = String(data.get("location_body_id", s.location_body_id))
 	s.orbit_angle = float(data.get("orbit_angle", s.orbit_angle))
