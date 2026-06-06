@@ -4,6 +4,39 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — Session 7: Fuel — reaction mass bites (step 7)
+
+Burns now cost reaction mass, the burn choice matters, and you can refuel.
+
+- **Consumption per tick:** `FlightController` spends RM for the distance
+  actually covered each tick (`FlightMath.rm_cost`), so the total over a course
+  equals the preview cost exactly. Emits `EventBus.fuel_changed`.
+- **Fuel bites at engage:** engaging now validates the tank can complete the
+  course (cost ≤ reaction mass) and rejects with `ORDER_REJECT_INSUFFICIENT_RM`
+  otherwise — the real time-vs-fuel decision (ADR 0005). Pick a cheaper burn or
+  refuel.
+- **Refuel at station:** a `dock` order refills to capacity when the ship is at a
+  `can_refuel` body, else rejects (`ORDER_REJECT_NOT_AT_STATION`). Added
+  `ShipState.max_reaction_mass` (tank capacity, saved; additive — no schema bump,
+  forgiving load covers it). The full Dock/Undock + crew voice are step 8; the
+  temporary click now docks when you click the station you're parked at.
+- **Live HUD:** `FuelReadout` shows current / max RM (tr() keys), updating on
+  `fuel_changed` / load. `Fuel.Pool` enum added (Reaction Mass now; Warp
+  reserved). Debug overlay already shows RM.
+
+**Tests:** `test_fuel` (5: spend matches the cost model, harder burn drinks more,
+engage refused without fuel, dock refuels, dock refused in open space) + the ship
+round-trip now covers `max_reaction_mass`. Whole suite **63/63 green** headless;
+scene boots clean.
+
+**Next:** build-order step 8 — the Helm console: terminal shell + minimal theme +
+config-driven components, Nav Plot with click-to-target, course preview, burn
+selector, order buttons, flight status, order log, and the full
+issue→acknowledge→execute lifecycle with ship-voice acks. (Retires the temporary
+click-to-fly.)
+
+---
+
 ## 2026-06-06 — Session 6: FlightController — the ship flies (step 6)
 
 The vertical spine moves: plot → engage → fly on the clock → orbit, with abort.
