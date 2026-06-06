@@ -4,6 +4,44 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — Session 6: FlightController — the ship flies (step 6)
+
+The vertical spine moves: plot → engage → fly on the clock → orbit, with abort.
+
+- **`FlightCore`** (`src/core/flight_core.gd`, pure, GUT-tested) — owns the
+  `State` enum (Idle → CourseSet → Engaging → Accelerating → Cruising →
+  Decelerating → Arriving → InOrbit, matching the FLIGHT_STATE_* strings) plus
+  `step_position` (clamped, never overshoots), `executing_state` (phase from
+  course progress), `has_arrived`, `state_key`. α0.1 movement is straight-line at
+  constant burn speed; the ramp phases are presentation, swappable later.
+- **`FlightController`** (`src/flight/`, plain system node — not an autoload) is
+  the system side of the order lifecycle (ADR 0014): validates orders off
+  `EventBus` (`set_course` / `engage` / `all_stop`, `order_belayed` = abort),
+  executes one `FlightCore.step` per `sim_tick`, writes `GameState.ship`
+  (position/heading), and emits `flight_state_changed`. Holds no system refs
+  (ADR 0003); reads GameState + TypeRegistry only. The course lives in
+  `ShipState.current_order` (target_id, burn, engaged, origin) so a mid-flight
+  save resumes — `game_state_loaded` recomputes the phase from geometry (the
+  transient Engaging beat isn't persisted). Abort returns to CourseSet (ADR 0005).
+- **Interpolated rendering (ADR 0004):** `ShipView` lerps between the last tick's
+  rendered position and the live authoritative position using
+  `SimClock.get_tick_fraction()` — smooth motion over the coarse tick; logic
+  never reads the interpolated value.
+- **Runnable now:** a TEMPORARY click-to-fly in `SystemView` (click a body →
+  plot + engage a Standard course) so flight is visible before the Helm Nav Plot;
+  replaced by the proper compose→preview→confirm flow in step 8. Debug overlay
+  now shows flight state, ship position, and reaction mass. Order-reject reasons
+  added as tr() keys.
+
+**Tests:** `test_flight_core` (6) + `test_flight_controller` (6: lay-in/ack,
+reject unknown target, engage→fly→orbit, belay→hold, all-stop→idle, load-resume).
+Whole suite **58/58 green** headless; scene boots clean.
+
+**Next:** build-order step 7 — reaction-mass consumption per burn on each tick,
+refuel at the station, live fuel on the HUD (GUT: fuel).
+
+---
+
 ## 2026-06-06 — Session 5: Flight ETA/fuel math (step 5)
 
 The time-vs-fuel model, as pure tested logic before any flight node exists.
