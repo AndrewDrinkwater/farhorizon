@@ -13,7 +13,7 @@ a mission clock. Being rebuilt deliberately from scratch; α0.1 = "The Ship Flie
 - `docs/ALPHA-0.1-SPEC.md` — current milestone + **build order** (you work this).
 - `docs/CONVENTIONS.md` — canonical units, versioning, style.
 - `docs/consoles/helm.md` — the first console (flight + navigation).
-- `docs/adr/0001..0014` — one decision per file. **If you change a decision,
+- `docs/adr/0001..0015` — one decision per file. **If you change a decision,
   add/supersede an ADR.**
 - `DEVLOG.md` — append a short entry per work session (newest on top).
 

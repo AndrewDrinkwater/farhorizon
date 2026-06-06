@@ -4,6 +4,37 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — Travel pipeline: location / course / context orders (ADR 0015)
+
+Reworked travel so available orders are derived from the ship's situation, not
+shown unconditionally. Separated three axes on `ShipState`:
+
+- **Location** (`Travel.Location`: `DEEP_SPACE` / `HOLDING` / `DOCKED`
+  + `location_body_id`) — where we are when not under way. Stations have a
+  holding area you arrive into, and dock from.
+- **Course** (`current_order`) — the laid-in target+burn; `engaged` = under way.
+  Nav-target *selection* is separate UI compose state (you lay in a course to
+  commit it).
+- **Motion** (`FlightCore.State`, now motion-only: Idle + transit phases;
+  dropped COURSE_SET/IN_ORBIT).
+
+**`Travel.available(context)`** (pure, GUT-tested) is the one source of truth for
+which orders are legal: Lay In (target elsewhere, not under way), Engage (course
+laid in, not under way, not docked), Belay/All Stop (under way), Dock (holding at
+a station), Undock (docked). The Helm enables/disables buttons from it; the
+FlightController validates against the same rules. Transitions: engage departs to
+deep space; arrival auto-enters HOLDING and consumes the course; belay keeps the
+course (re-engageable), all-stop drops it; dock refuels, undock returns to
+holding. Retired establish/break-orbit; added Undock and `ship_context_changed`.
+Status now reads the situation ("Holding: Anchorage", "Cruising → Rubicon",
+"Drifting"). Location is serialized (resumes on load).
+
+**Tests:** new `test_travel` (5); reworked flight/fuel/helm tests for the model.
+**82/82 green** headless; verified the context-gated buttons + status via
+screenshot.
+
+---
+
 ## 2026-06-06 — Fix: Helm console rendered off-screen
 
 Playtest caught the Helm panels invisible. Cause: `HelmConsole` (a plain Control

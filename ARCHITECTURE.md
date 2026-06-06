@@ -312,3 +312,4 @@ Each major fork has an ADR in `docs/adr/`. See:
 - 0012 — Accessibility palette and debug overlay
 - 0013 — UI organized as captain's consoles
 - 0014 — Order lifecycle: acknowledged intents, voiced by crew slot
+- 0015 — Travel pipeline: location, course, and context-derived orders
