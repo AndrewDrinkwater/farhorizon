@@ -4,6 +4,39 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — Session 4: World + static bodies (step 4)
+
+The system is on screen: a star, planets, a station, and the ship.
+
+- **Authored data types** (`src/data`, immutable `.tres`, ADR 0002/0005):
+  `BodyData` (id, name_key, kind STAR/PLANET/STATION, position in wu, radius,
+  tint, can_dock/can_refuel) and `SystemData` (id, name_key, bodies, ship_start).
+- **The hardcoded "Sol" system** — `resources/systems/sol.tres`: star + 3 planets
+  + 1 dockable station. Authored via a regenerable tool (`tools/build_sol_system.gd`,
+  run headless) rather than hand-edited, so the typed sub-resource array stays
+  valid; the `.tres` is the committed artifact.
+- **TypeRegistry** now scans `resources/systems/` on ready and resolves
+  `get_system(id)` / `has_system` / `system_ids` (read-only cache, by id).
+- **World nodes** (`src/world`, presentation-only — read state, never mutate):
+  `BodyView` (kind drives the shape — star = ringed disc, station = diamond,
+  planet = disc — so type reads without colour, ADR 0012; tr() name label),
+  `ShipView` (heading-pointed triangle tracking `GameState.ship`), `SystemView`
+  (builds bodies + ship + a ship-following `Camera2D`, `ignore_rotation` so the
+  view stays upright). `PIXELS_PER_WU` is the single wu→screen scale.
+- **Shell wiring:** `main` bootstraps the start system into GameState (system_id
+  + ship start), builds the `SystemView`, and moves the HUD (title + clock
+  readout) into a `CanvasLayer` so it stays screen-fixed under the world camera.
+- **Strings:** system + body display names added (all via tr(), ADR 0010).
+
+**Tests:** `test_type_registry` (4) guards the authored content loads and stays
+well-formed (star/3 planets/station, dock+refuel, name keys present). Whole
+suite **37/37 green** headless; scene boots clean with system 'sol'.
+
+**Next:** build-order step 5 — pure ETA/fuel math in `src/core` (GUT-tested),
+the foundation for the course preview and FlightController.
+
+---
+
 ## 2026-06-06 — Session 3: GameState tree + SaveManager round-trip (step 3)
 
 The state tree and a real, versioned save/load.
