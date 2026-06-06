@@ -4,6 +4,42 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — Session 3: GameState tree + SaveManager round-trip (step 3)
+
+The state tree and a real, versioned save/load.
+
+- **Typed state objects** in `src/core/state` (pure, node-free, GUT-tested):
+  `ClockState` (tick, speed), `ShipState` (hull_id, position, heading,
+  reaction_mass, current_order — the step-3 stub), `SystemState` (system_id).
+  Each implements `to_dict()` + a forgiving static `from_dict()`; authored
+  content is referenced by id, never embedded (ADR 0002).
+- **`GameState`** now owns the tree (`clock`/`ship`/`system`) with `new_game()`,
+  `to_dict()`, and a forgiving `from_dict()` that falls back to defaults for
+  missing branches (ADR 0008). It's the single source of truth.
+- **`SimClock` reads/advances `GameState.clock` directly** rather than keeping a
+  divergent copy — the live tick/speed *is* the saved value, so the save is just
+  a serialized tree (resolves the ADR 0002 / "transient mirror" tension cleanly).
+  On `game_state_loaded` it drops sub-tick progress and refreshes listeners.
+- **`SaveManager`** writes a version-stamped payload (`game_version`,
+  `schema_version`, `state`) via `var_to_str` (round-trips `Vector2` cleanly,
+  human-readable) to `user://save_0.sav`. Load is forgiving, emits
+  `EventBus.game_state_loaded`, and has a `_migrate()` hook for future schema
+  bumps. The clock readout also refreshes on load.
+
+**Tests:** added `test_state_objects` (4) and `test_save_manager` (5: full
+round-trip incl. Vector2 + active order, version stamps, load-emits-signal,
+no-save no-op, partial/forgiving load). Whole suite **33/33 green** headless;
+main scene boots clean.
+
+**Note:** `SAVE_PATH` moved from the scaffold's `.tres` to `.sav` (it's a
+serialized dict, not a Resource). No saves existed, so no migration needed.
+
+**Next:** build-order step 4 — load a hardcoded star system `.tres` (star,
+planets, station) via TypeRegistry, place body nodes + camera, ship at a start
+position.
+
+---
+
 ## 2026-06-06 — Session 2: Gate + SimClock tick loop (α0.1 build-order step 2)
 
 First real compile/run of the scaffold, then the discrete clock.
