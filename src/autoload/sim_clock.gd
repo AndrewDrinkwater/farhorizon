@@ -1,13 +1,15 @@
 extends Node
 ## SimClock — the sole driver of simulation time (ADR 0004, CONVENTIONS.md).
 ##
-## Discrete ticks: one tick = one in-game hour. At 1x speed the clock emits
-## ticks every SECONDS_PER_TICK real seconds. Speed multiplier scales that;
-## 0 = paused. Nothing else owns a sim-affecting timer.
+## Discrete ticks: one tick = one in-game hour. At 1x speed the clock emits a
+## tick every SECONDS_PER_TICK real seconds; the speed multiplier scales that,
+## with 0 = paused. Nothing else owns a sim-affecting timer — every ticking
+## system subscribes to EventBus.sim_tick instead.
 ##
-## SCAFFOLD STUB — tick accumulation + window-focus auto-pause are implemented
-## in build-order step 2. Public surface is declared so other systems can be
-## wired against it. See docs/ALPHA-0.1-SPEC.md.
+## This node is a thin shell: the accumulation math lives in the pure, tested
+## ClockMath (src/core). Speed control is wired to the named input actions
+## (ADR 0011). The one allowed auto-pause is on OS window-focus loss, gated by
+## ConfigManager's pause_on_focus_loss (CONVENTIONS.md "Window focus").
 
 ## Real seconds per tick at 1x speed (tuning constant, not logic).
 const SECONDS_PER_TICK: float = 2.0
@@ -17,7 +19,49 @@ const SPEEDS: Array[float] = [0.0, 1.0, 2.0, 4.0]
 
 var _tick: int = 0
 var _speed: float = 1.0
+var _math: ClockMath
 
+## Speed to restore when un-pausing (manual toggle); always a running speed.
+var _last_running_speed: float = 1.0
+## True only while the clock paused itself for focus loss, so focus regain
+## restores exactly that and a manual pause-while-unfocused isn't clobbered.
+var _focus_auto_paused: bool = false
+var _speed_before_focus_loss: float = 1.0
+
+
+func _ready() -> void:
+	_math = ClockMath.new(SECONDS_PER_TICK)
+	# Start at the configured default speed (falls back to 1x via DEFAULTS).
+	var default_speed: float = float(ConfigManager.get_setting("gameplay", "default_sim_speed"))
+	if default_speed > 0.0:
+		_last_running_speed = default_speed
+	_speed = default_speed
+
+
+func _process(delta: float) -> void:
+	var ticks: int = _math.advance(delta, _speed)
+	for _i: int in ticks:
+		_tick += 1
+		EventBus.sim_tick.emit(_tick)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("sim_pause"):
+		toggle_pause()
+	elif event.is_action_pressed("sim_speed_up"):
+		speed_up()
+	elif event.is_action_pressed("sim_speed_down"):
+		speed_down()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_on_focus_lost()
+	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
+		_on_focus_gained()
+
+
+# --- Public surface (read by UI, never mutated by it) ---
 
 func get_tick() -> int:
 	return _tick
@@ -27,11 +71,62 @@ func get_speed() -> float:
 	return _speed
 
 
+func is_paused() -> bool:
+	return _speed <= 0.0
+
+
+## Fractional progress to the next tick (0..1) for interpolated rendering.
+func get_tick_fraction() -> float:
+	return _math.get_tick_fraction() if _math != null else 0.0
+
+
 func set_speed(speed: float) -> void:
 	if is_equal_approx(speed, _speed):
 		return
+	if speed > 0.0:
+		_last_running_speed = speed
 	_speed = speed
 	EventBus.sim_speed_changed.emit(_speed)
 
-# TODO(step 2): accumulate real time in _process, emit EventBus.sim_tick per
-# step, and auto-pause on window focus loss (CONVENTIONS.md).
+
+## Step up through SPEEDS (caps at the fastest).
+func speed_up() -> void:
+	var idx: int = SPEEDS.find(_speed)
+	if idx == -1:
+		idx = SPEEDS.find(1.0)
+	set_speed(SPEEDS[mini(idx + 1, SPEEDS.size() - 1)])
+
+
+## Step down through SPEEDS (floors at paused).
+func speed_down() -> void:
+	var idx: int = SPEEDS.find(_speed)
+	if idx == -1:
+		idx = SPEEDS.find(1.0)
+	set_speed(SPEEDS[maxi(idx - 1, 0)])
+
+
+## Toggle between paused and the last running speed (player choice, ADR 0004).
+func toggle_pause() -> void:
+	if is_paused():
+		set_speed(_last_running_speed)
+	else:
+		set_speed(0.0)
+
+
+# --- Window-focus auto-pause (the one allowed auto-pause; CONVENTIONS.md) ---
+
+func _on_focus_lost() -> void:
+	if not bool(ConfigManager.get_setting("gameplay", "pause_on_focus_loss")):
+		return
+	if is_paused():
+		return  # nothing to do; leave the player's pause as-is
+	_speed_before_focus_loss = _speed
+	_focus_auto_paused = true
+	set_speed(0.0)
+
+
+func _on_focus_gained() -> void:
+	if not _focus_auto_paused:
+		return
+	_focus_auto_paused = false
+	set_speed(_speed_before_focus_loss)
