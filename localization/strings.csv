@@ -37,3 +37,7 @@ ORDER_REJECT_TARGET_UNKNOWN,Unable — unknown target.
 ORDER_REJECT_NO_COURSE,Unable — no course laid in.
 ORDER_REJECT_BURN_INVALID,Unable — invalid burn intensity.
 ORDER_REJECT_UNKNOWN,Unable — unknown order.
+ORDER_REJECT_INSUFFICIENT_RM,Unable — insufficient reaction mass.
+ORDER_REJECT_NOT_AT_STATION,Unable — not at a station.
+VOICE_SHIP_DOCKED,Docked. Refuelling.
+FUEL_FORMAT,{current} / {max} RM

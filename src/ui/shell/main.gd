@@ -7,6 +7,7 @@ extends Node
 ## shell + Helm console replace this in build-order step 8.
 
 const ClockReadout := preload("res://src/ui/shell/clock_readout.gd")
+const FuelReadout := preload("res://src/ui/shell/fuel_readout.gd")
 const DebugOverlay := preload("res://src/ui/components/debug_overlay.gd")
 
 ## Starting system until a save/new-game flow chooses one (step 3+ wiring).
@@ -61,3 +62,7 @@ func _build_hud() -> void:
 	var clock: Label = ClockReadout.new()
 	clock.position = Vector2(40.0, 72.0)
 	layer.add_child(clock)
+
+	var fuel: Label = FuelReadout.new()
+	fuel.position = Vector2(40.0, 96.0)
+	layer.add_child(fuel)

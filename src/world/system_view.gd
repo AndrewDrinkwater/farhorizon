@@ -46,10 +46,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		var world := get_global_mouse_position()
 		var target := _body_at(world)
 		if target != null:
-			EventBus.order_issued.emit({
-				"type": "set_course", "target_id": target.id, "burn": FlightMath.Burn.STANDARD,
-			})
-			EventBus.order_issued.emit({"type": "engage"})
+			# Parked at a refuelling body? Dock. Otherwise plot + engage a course.
+			if target.can_refuel and FlightCore.has_arrived(GameState.ship.position, target.position):
+				EventBus.order_issued.emit({"type": "dock"})
+			else:
+				EventBus.order_issued.emit({
+					"type": "set_course", "target_id": target.id, "burn": FlightMath.Burn.STANDARD,
+				})
+				EventBus.order_issued.emit({"type": "engage"})
 
 
 func _body_at(world_pos: Vector2) -> BodyData:
