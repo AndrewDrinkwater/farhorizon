@@ -4,6 +4,30 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — Build: orrery Nav Plot + moons + sensor contacts (α0.2 steps 1-6)
+
+Built the navigation slice through contacts. Core first, tested, then the render.
+- **Core (GUT):** `OrreryProjection` (log radius, exact bearing) + `project_child`
+  for moons; `Sensors` range + segment (capsule) detection.
+- **Data/state:** `BodyData.parent_id` + `Kind.MOON`, `ContactData`,
+  `SystemData.contacts`, `ShipState.sensor_range`, `GameState.ContactsState`
+  (saved), EventBus contact signals. Authored Verdant's moon **Cinder** + three
+  transients (Kepri derelict / Veil anomaly / Echo signal) into Sol.
+- **Orrery render:** new screen-space `OrreryView` replaces the world-space map —
+  the whole 1→40 AU system on one screen, bodies on log rings (bearing exact),
+  moons clustered by their parent, ship + curved (sampled) course line,
+  screen-space picking. Retired the old world nodes (SystemView/BodyView/
+  ShipView/OrbitRings/CourseLine) and the Camera2D/pan path.
+- **Sensors wired:** `SensorController` ticks the segment check → `ContactsState`
+  → orrery draws detected transients as a distinct blip glyph (shape, not colour;
+  ADR 0012) winking in/out.
+
+Verified by screenshots (full system reads at once; Cinder beside Verdant; Kepri
+winks in once in range) and `tier_of` checks. 103/103 green. Still to do:
+tactical scope, focus-a-body moon sub-view, feel pass.
+
+---
+
 ## 2026-06-06 — α0.2 spec: "Navigation II" (orrery + moons + sensors)
 
 Spec session (no code). Turned the navigation design into a milestone:
