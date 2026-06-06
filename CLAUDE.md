@@ -68,20 +68,26 @@ localization/  strings.csv
 
 ## One-time editor setup (see SETUP.md)
 - Enable the **Gut** plugin if not auto-enabled (it's listed in `project.godot`).
-- Register the imported translation: Project Settings → Localization → add
-  `localization/strings.en.translation` (generated on first CSV import).
-- Sanity-check the input actions in `project.godot` (`sim_pause`, `sim_speed_up`,
-  `sim_speed_down`, `toggle_debug`) resolve to keys after first open.
+- The translation is registered in `project.godot` (`[internationalization]`),
+  so `tr()` works out of the box. If you edit `strings.csv` outside the editor,
+  run `godot --headless --import` to regenerate the compiled `.translation`.
+- Input actions (`sim_pause`, `sim_speed_up/down`, `toggle_debug` = F3,
+  `sim_save` = F5, `sim_load` = F9) are in `project.godot`.
 
 ## Current state & next task
-- **Done:** α0.1 build-order **step 1** (scaffold) — see `DEVLOG.md` top entries.
-  Autoloads are typed skeletons with TODOs naming their step; `ConfigManager` is
-  the only fully-implemented one.
-- **Next:** build-order **step 2** — implement `SimClock` (tick accumulation,
-  speed multipliers, window-focus auto-pause) emitting `EventBus.sim_tick`, plus
-  a tiny on-screen clock readout and the toggleable debug overlay (ADR 0012).
-  Add GUT tests for the tick math. Then continue down the build order in
-  `docs/ALPHA-0.1-SPEC.md`.
+- **Done:** **α0.1 "The Ship Flies" — complete** (build-order steps 1–9). The
+  spine works end to end: plot a course on the Helm Nav Plot (preview ETA +
+  reaction mass, pick a burn), engage and fly it on the discrete clock with
+  interpolated motion, spend/refuel reaction mass, save/load the run (F5/F9), all
+  through the captain's-terminal Helm console with the order lifecycle + ship
+  voice. **74 GUT tests green.** See `DEVLOG.md` for the per-session history and
+  the step-9 done-criteria confirmation.
+- **Tuning left (by feel, not blocking):** system spacing + the tick/burn
+  numeric constants are sensible baselines, not play-tuned (they're clearly
+  marked; none touch logic).
+- **Next:** α0.2 scoping — pick the next slice from the design vision (e.g. a
+  second console, scanning, or multi-system groundwork). No spec authored yet;
+  agree scope + write the milestone spec before building, as with α0.1.
 
 ## Workflow expectations
 - Keep `DEVLOG.md` updated; add an ADR for any architectural fork.

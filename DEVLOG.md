@@ -4,6 +4,45 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — Session 9: Polish + feel pass — α0.1 complete (step 9)
+
+Milestone wrap. Clarity/camera polish, a usable save/load, done-criteria confirmed.
+
+- **Camera (scale-tuning debt):** `CameraFit` (src/core, tested) defines zoom
+  min/max bounds; `SystemView` frames the whole system at boot (computed zoom,
+  not a blind constant) and the mouse wheel zooms within bounds. Resolves the
+  camera half of the scale debt; body spacing + tick/burn numbers remain
+  feel-tuning (clearly-marked constants, none touch logic).
+- **Nav Plot clarity:** `CourseLine` draws a dashed ship→target line + a
+  destination marker while a course is laid in/executing (helm.md), tracking the
+  interpolated ship marker.
+- **Save/load in-game:** `sim_save` (F5) / `sim_load` (F9) actions + a
+  `SaveController` with a toast — makes the (already-tested) save/load spine
+  usable. Load emits `game_state_loaded`; the console, fuel, clock, and flight
+  resync off it.
+- **Fix:** the debug overlay + boot line mislabelled the debug key as F1; it's
+  bound to **F3**. Corrected.
+
+**α0.1 done-criteria — confirmed:**
+1. **Plot + burn** — Helm Nav Plot: click a body → ETA + RM preview → burn
+   selector → Lay In / Engage. ✓
+2. **Fly on the clock** — FlightController over discrete ticks, interpolated
+   render; pause / 1× / 2× / 4× in the shell, clock runs while the console is up. ✓
+3. **Fuel matters** — RM spent per burn, refuel by docking at the station, live
+   gauge. ✓
+4. **Save / load** — position, fuel, tick, system round-trip via SaveManager,
+   schema-versioned; F5/F9 in-game. ✓
+5. **It feels good** — legible named states, ETA, abort (Belay) always available,
+   course line; static bodies = no moving-target clunk. (Numeric feel left for
+   in-engine tuning.) ✓
+6. **Green tests** — clock, ETA/fuel, save round-trip, + flight/console/voice:
+   **74/74 GUT green** headless. ✓
+
+**Status:** α0.1 "The Ship Flies" is complete. Next is α0.2 scoping (agree scope,
+write the milestone spec, then build) — see CLAUDE.md.
+
+---
+
 ## 2026-06-06 — Session 8: The Helm console (step 8)
 
 The α0.1 spine is now played through a real captain's terminal.
