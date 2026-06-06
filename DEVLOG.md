@@ -4,6 +4,29 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-06 — Scale + pacing pass (deliberate, to spec)
+
+Set scale/pacing to the captain's chosen feel (was placeholder):
+- **Time mapping:** `SECONDS_PER_TICK = 60` → 1 real second = 1 in-game minute at
+  1× (1 tick = 1 in-game hour).
+- **Trips:** re-spaced Sol so the nearest planet is a ~3-tick standard burn
+  (~3 in-game hours / ~3 real minutes at 1×; ~2 on a Hard burn). Outer bodies
+  ~5-9 ticks. Verified by a fly-test (Verdant standard = 3 ticks).
+- **Fuel:** lowered RM rates (0.012 / 0.020 / 0.034) for a "loose" tank — nearest
+  hop ~6 RM of 100, so well over 5 trips before refuelling.
+- **Orbit rework (forced by 60s ticks):** the holding orbit moved from per-tick
+  to **smooth per-frame** in `FlightController._process` (real-time, ~30s/orbit,
+  speed-scaled, freezes when paused). Still authoritative, so arrival/departure
+  stay jump-free; `ShipView` reads the position directly while holding. The
+  camera's fit-to-system framing handles the new spacing automatically.
+
+Knobs (all clearly marked, none touch logic): `SimClock.SECONDS_PER_TICK`,
+`FlightMath` burn speeds + RM rates, `Travel.HOLDING_GAP`,
+`FlightController.ORBIT_PERIOD_SECONDS`, body spacing in `tools/build_sol_system.gd`.
+84/84 green.
+
+---
+
 ## 2026-06-06 — Fix: arrive/depart through the body; orbit is now authoritative
 
 Two travel bugs, same root cause: the holding orbit was a view-only effect while

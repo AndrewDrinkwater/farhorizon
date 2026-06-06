@@ -12,18 +12,21 @@ const OUT_PATH: String = "res://resources/systems/sol.tres"
 
 
 func _init() -> void:
+	# Deliberate spacing (wu): the nearest planet is ~3 standard-burn ticks
+	# (~3 in-game hours / ~3 real minutes at 1x) from the ship start; outer bodies
+	# scale up from there. Tune by feel — none of this touches logic.
 	var bodies: Array[BodyData] = []
 	bodies.append(_body("sol_star", "BODY_SOL_STAR", BodyData.Kind.STAR,
 		Vector2(0, 0), 120.0, Color(1.0, 0.85, 0.4)))
 	bodies.append(_body("verdant", "BODY_VERDANT", BodyData.Kind.PLANET,
-		Vector2(-900, 300), 48.0, Color(0.4, 0.78, 0.52)))
+		Vector2(450, 0), 48.0, Color(0.4, 0.78, 0.52)))
 	bodies.append(_body("rubicon", "BODY_RUBICON", BodyData.Kind.PLANET,
-		Vector2(1100, -220), 56.0, Color(0.82, 0.42, 0.34)))
+		Vector2(-450, 250), 56.0, Color(0.82, 0.42, 0.34)))
 	bodies.append(_body("tethys", "BODY_TETHYS", BodyData.Kind.PLANET,
-		Vector2(320, 1000), 40.0, Color(0.55, 0.62, 0.82)))
+		Vector2(200, 700), 40.0, Color(0.55, 0.62, 0.82)))
 
 	var station := _body("anchorage", "BODY_ANCHORAGE", BodyData.Kind.STATION,
-		Vector2(650, 250), 22.0, Color(0.78, 0.78, 0.92))
+		Vector2(700, 300), 22.0, Color(0.78, 0.78, 0.92))
 	station.can_dock = true
 	station.can_refuel = true
 	bodies.append(station)
@@ -32,7 +35,7 @@ func _init() -> void:
 	system.id = "sol"
 	system.name_key = "SYSTEM_SOL"
 	system.bodies = bodies
-	system.ship_start = Vector2(200, -150)
+	system.ship_start = Vector2(450, -360)
 
 	var err: int = ResourceSaver.save(system, OUT_PATH)
 	if err == OK:

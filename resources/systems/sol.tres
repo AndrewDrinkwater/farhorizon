@@ -15,7 +15,7 @@ tint = Color(1, 0.85, 0.4, 1)
 script = ExtResource("1_a4vbc")
 id = "verdant"
 name_key = "BODY_VERDANT"
-position = Vector2(-900, 300)
+position = Vector2(450, 0)
 radius = 48.0
 tint = Color(0.4, 0.78, 0.52, 1)
 
@@ -23,7 +23,7 @@ tint = Color(0.4, 0.78, 0.52, 1)
 script = ExtResource("1_a4vbc")
 id = "rubicon"
 name_key = "BODY_RUBICON"
-position = Vector2(1100, -220)
+position = Vector2(-450, 250)
 radius = 56.0
 tint = Color(0.82, 0.42, 0.34, 1)
 
@@ -31,7 +31,7 @@ tint = Color(0.82, 0.42, 0.34, 1)
 script = ExtResource("1_a4vbc")
 id = "tethys"
 name_key = "BODY_TETHYS"
-position = Vector2(320, 1000)
+position = Vector2(200, 700)
 tint = Color(0.55, 0.62, 0.82, 1)
 
 [sub_resource type="Resource" id="Resource_fnbma"]
@@ -39,7 +39,7 @@ script = ExtResource("1_a4vbc")
 id = "anchorage"
 name_key = "BODY_ANCHORAGE"
 kind = 2
-position = Vector2(650, 250)
+position = Vector2(700, 300)
 radius = 22.0
 tint = Color(0.78, 0.78, 0.92, 1)
 can_dock = true
@@ -50,4 +50,4 @@ script = ExtResource("2_is64w")
 id = "sol"
 name_key = "SYSTEM_SOL"
 bodies = Array[ExtResource("1_a4vbc")]([SubResource("Resource_wps71"), SubResource("Resource_4bpnw"), SubResource("Resource_0i7mv"), SubResource("Resource_sqund"), SubResource("Resource_fnbma")])
-ship_start = Vector2(200, -150)
+ship_start = Vector2(450, -360)

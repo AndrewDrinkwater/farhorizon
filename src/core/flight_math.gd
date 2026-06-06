@@ -21,11 +21,12 @@ const _SPEED_WU_PER_TICK: Dictionary = {
 	Burn.HARD: 240.0,
 }
 
-## Reaction mass (RM) spent per world unit travelled.
+## Reaction mass (RM) spent per world unit travelled. Tuned for a "loose" tank
+## (~5+ typical trips before refuelling) against the Sol spacing + 100 RM tank.
 const _RM_PER_WU: Dictionary = {
-	Burn.ECONOMY: 0.020,
-	Burn.STANDARD: 0.035,
-	Burn.HARD: 0.060,
+	Burn.ECONOMY: 0.012,
+	Burn.STANDARD: 0.020,
+	Burn.HARD: 0.034,
 }
 
 

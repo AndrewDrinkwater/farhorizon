@@ -31,9 +31,19 @@ func _on_sim_tick(_tick: int) -> void:
 
 
 func _process(_delta: float) -> void:
-	_to = GameState.ship.position
+	var ship: ShipState = GameState.ship
+	# Holding/docked: position is driven smoothly per-frame by the controller
+	# (the orbit), so read it directly rather than tick-interpolating.
+	if ship.location != Travel.Location.DEEP_SPACE:
+		position = ship.position
+		rotation = ship.heading
+		_from = position
+		_to = position
+		return
+	# Under way / drifting: interpolate the authoritative position between ticks.
+	_to = ship.position
 	position = _from.lerp(_to, clampf(SimClock.get_tick_fraction(), 0.0, 1.0))
-	rotation = GameState.ship.heading
+	rotation = ship.heading
 
 
 func _draw() -> void:

@@ -79,9 +79,9 @@ func test_holding_orbit_advances_on_the_ring() -> void:
 	var verdant := _find("verdant")
 	_fly_to("verdant", FlightMath.Burn.HARD)
 	var p1: Vector2 = GameState.ship.position
-	EventBus.sim_tick.emit(999)
+	_fc._advance_holding_orbit(2.0)  # 2 (speed-scaled) seconds of orbit
 	var p2: Vector2 = GameState.ship.position
-	assert_ne(p1, p2, "the ship moves along its orbit each tick")
+	assert_ne(p1, p2, "the ship moves along its orbit over time")
 	assert_almost_eq(p2.distance_to(verdant.position), Travel.holding_radius(verdant.radius), 0.5,
 		"orbit stays on the holding ring")
 	assert_eq(GameState.ship.location, Travel.Location.HOLDING, "still holding")

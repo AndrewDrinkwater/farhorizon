@@ -11,8 +11,9 @@ extends Node
 ##
 ## NOT an autoload (six only) — a plain system node placed in the scene.
 
-## SimClock ticks for one full holding orbit (tuning). One orbit per in-game day.
-const HOLDING_ORBIT_TICKS: int = 24
+## Real seconds for one full holding orbit at 1x (tuning, cosmetic). Per-frame so
+## it stays smooth and visible regardless of SECONDS_PER_TICK.
+const ORBIT_PERIOD_SECONDS: float = 30.0
 
 var _state: int = FlightCore.State.IDLE
 
@@ -161,10 +162,19 @@ func _undock() -> void:
 
 # --- Execution (one step per SimClock tick) ---
 
+## Smooth holding orbit, advanced per-frame (not on ticks) so it stays visible at
+## the coarse tick rate; sim-speed scaled, so it freezes when paused.
+func _process(delta: float) -> void:
+	if GameState.ship.location != Travel.Location.HOLDING:
+		return
+	var seconds := delta * SimClock.get_speed()
+	if seconds > 0.0:
+		_advance_holding_orbit(seconds)
+
+
 func _on_sim_tick(_tick: int) -> void:
-	# Holding = orbiting: advance the ship around the body's holding ring.
+	# Holding orbit is handled per-frame in _process, not on ticks.
 	if GameState.ship.location == Travel.Location.HOLDING:
-		_advance_holding_orbit()
 		return
 
 	var order: Dictionary = GameState.ship.current_order
@@ -216,13 +226,14 @@ func _arrive(body: BodyData) -> void:
 	_notify_context()
 
 
-## One orbit step around the holding body (authoritative; the view interpolates).
-func _advance_holding_orbit() -> void:
+## Advance the holding orbit by `seconds` of (speed-scaled) time. Authoritative —
+## the rendered position follows it directly while holding (ShipView).
+func _advance_holding_orbit(seconds: float) -> void:
 	var body := _resolve_body(GameState.ship.location_body_id)
 	if body == null:
 		return
 	GameState.ship.orbit_angle = wrapf(
-		GameState.ship.orbit_angle + TAU / float(HOLDING_ORBIT_TICKS), 0.0, TAU)
+		GameState.ship.orbit_angle + seconds * (TAU / ORBIT_PERIOD_SECONDS), 0.0, TAU)
 	var new_pos: Vector2 = body.position \
 		+ Vector2.from_angle(GameState.ship.orbit_angle) * Travel.holding_radius(body.radius)
 	GameState.ship.heading = (new_pos - GameState.ship.position).angle()  # tangent to the ring

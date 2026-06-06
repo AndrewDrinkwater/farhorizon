@@ -13,8 +13,9 @@ extends Node
 ## input actions (ADR 0011). The one allowed auto-pause is on OS window-focus
 ## loss, gated by ConfigManager's pause_on_focus_loss (CONVENTIONS.md).
 
-## Real seconds per tick at 1x speed (tuning constant, not logic).
-const SECONDS_PER_TICK: float = 2.0
+## Real seconds per tick at 1x speed (tuning constant, not logic). One tick = one
+## in-game hour, so 60 real s/tick means 1 real second = 1 in-game minute at 1x.
+const SECONDS_PER_TICK: float = 60.0
 
 ## Allowed speed multipliers exposed at the Helm/shell (0 = paused).
 const SPEEDS: Array[float] = [0.0, 1.0, 2.0, 4.0]
