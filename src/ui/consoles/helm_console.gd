@@ -11,9 +11,14 @@ extends Control
 
 const POST: String = "helm"
 
-# Compose state
-var _target_id: String = ""
+# Compose state — the Nav Plot selection: a body, a contact, or a free point
+# (ADR 0020). `_sel_id` is the body/contact id ("" for a point); `_sel_point` is
+# the destination for a free waypoint.
+var _sel_kind: int = Travel.TargetKind.NONE
+var _sel_id: String = ""
+var _sel_point: Vector2 = Vector2.ZERO
 var _burn: int = FlightMath.Burn.STANDARD
+var _scale: int = OrreryParams.ScaleMode.LOG  # orrery schematic ↔ true scale (ADR 0021)
 var _flight_state: int = FlightCore.State.IDLE
 
 # Course Order widgets
@@ -22,6 +27,7 @@ var _distance_readout: TReadout
 var _eta_readout: TReadout
 var _rm_readout: TReadout
 var _burn_buttons: Dictionary = {}  # burn:int -> TButton
+var _scale_buttons: Dictionary = {}  # OrreryParams.ScaleMode -> TButton
 var _action_buttons: Dictionary = {}  # order id:String -> TButton
 
 # Flight Status widgets
@@ -49,6 +55,8 @@ func _ready() -> void:
 	_build_order_log()
 	_connect_bus()
 	_refresh_all()
+	EventBus.nav_burn_changed.emit(_burn)  # sync the nav views to the starting burn (ADR 0019)
+	EventBus.nav_scale_changed.emit(_scale)  # sync the orrery to the starting scale (ADR 0021)
 
 
 # --- Layout helpers ---
@@ -95,6 +103,24 @@ func _build_course_order() -> void:
 		burn_row.add_child(button)
 		_burn_buttons[burn] = button
 
+	var scale_row := HBoxContainer.new()
+	scale_row.add_theme_constant_override("separation", 4)
+	c.add_child(scale_row)
+	var scale_caption := Label.new()
+	scale_caption.text = tr("HELM_SCALE_LABEL")
+	scale_caption.add_theme_color_override("font_color", Palette.TEXT_DIM)
+	scale_caption.custom_minimum_size = Vector2(110.0, 0.0)
+	scale_row.add_child(scale_caption)
+	for entry: Array in [
+		[OrreryParams.ScaleMode.LOG, "HELM_SCALE_SCHEMATIC"],
+		[OrreryParams.ScaleMode.LINEAR, "HELM_SCALE_TRUE"],
+	]:
+		var mode: int = entry[0]
+		var button := TButton.new()
+		button.setup(entry[1], _select_scale.bind(mode))
+		scale_row.add_child(button)
+		_scale_buttons[mode] = button
+
 	_distance_readout = TReadout.new("HELM_DISTANCE")
 	c.add_child(_distance_readout)
 	_eta_readout = TReadout.new("HELM_ETA")
@@ -115,8 +141,11 @@ func _build_course_order() -> void:
 	row2.add_child(_make_action("all_stop", "HELM_ALL_STOP", _all_stop))
 	row2.add_child(_make_action("dock", "HELM_DOCK", _dock))
 	row2.add_child(_make_action("undock", "HELM_UNDOCK", _undock))
+	row2.add_child(_make_action("scan", "HELM_SCAN", _scan))
+	row2.add_child(_make_action("focus", "HELM_FOCUS", _focus))
 
 	_refresh_burn_buttons()
+	_refresh_scale_buttons()
 
 
 func _make_action(id: String, label_key: String, on_press: Callable) -> TButton:
@@ -159,6 +188,10 @@ func _build_order_log() -> void:
 
 func _connect_bus() -> void:
 	EventBus.nav_target_selected.connect(_on_target_selected)
+	EventBus.nav_point_selected.connect(_on_point_selected)
+	EventBus.contact_detected.connect(_on_contacts_changed.unbind(1))
+	EventBus.contact_lost.connect(_on_contacts_changed.unbind(1))
+	EventBus.contact_promoted.connect(_on_contacts_changed.unbind(2))
 	EventBus.flight_state_changed.connect(_on_flight_state_changed)
 	EventBus.ship_context_changed.connect(_refresh_all)
 	EventBus.sim_tick.connect(_on_tick.unbind(1))
@@ -169,7 +202,29 @@ func _connect_bus() -> void:
 
 
 func _on_target_selected(target_id: String) -> void:
-	_target_id = target_id
+	_sel_id = target_id
+	_sel_point = Vector2.ZERO
+	if _resolve_body(target_id) != null:
+		_sel_kind = Travel.TargetKind.BODY
+	elif _resolve_contact(target_id) != null:
+		_sel_kind = Travel.TargetKind.CONTACT
+	else:
+		_sel_kind = Travel.TargetKind.NONE
+	_refresh_preview()
+	_refresh_actions()
+
+
+func _on_point_selected(point: Vector2) -> void:
+	_sel_kind = Travel.TargetKind.POINT
+	_sel_id = ""
+	_sel_point = point
+	_refresh_preview()
+	_refresh_actions()
+
+
+## A contact winked in/out or was identified — the preview name + Scan
+## availability may change.
+func _on_contacts_changed() -> void:
 	_refresh_preview()
 	_refresh_actions()
 
@@ -204,12 +259,34 @@ func _select_burn(burn: int) -> void:
 	_burn = burn
 	_refresh_burn_buttons()
 	_refresh_preview()
+	EventBus.nav_burn_changed.emit(_burn)  # nav views recompute time annotations (ADR 0019)
+
+
+func _select_scale(mode: int) -> void:
+	_scale = mode
+	_refresh_scale_buttons()
+	EventBus.nav_scale_changed.emit(_scale)  # orrery remaps radii (ADR 0021)
 
 
 func _lay_in_course() -> void:
-	if _target_id == "":
+	if _sel_kind == Travel.TargetKind.NONE:
 		return
-	EventBus.order_issued.emit({"type": "set_course", "target_id": _target_id, "burn": _burn})
+	EventBus.order_issued.emit({
+		"type": "set_course", "target_id": _sel_id, "point": _sel_point, "burn": _burn,
+	})
+
+
+func _scan() -> void:
+	if _sel_kind != Travel.TargetKind.CONTACT:
+		return
+	EventBus.order_issued.emit({"type": "scan", "contact_id": _sel_id})
+
+
+## Open the focus inset for the selected moon-bearing planet (ADR 0022). Not a
+## travel order — a view request on the bus.
+func _focus() -> void:
+	if _selection_has_moons():
+		EventBus.nav_focus_requested.emit(_sel_id)
 
 
 func _engage() -> void:
@@ -246,38 +323,65 @@ func _refresh_burn_buttons() -> void:
 		_burn_buttons[burn].modulate = Palette.ACCENT if burn == _burn else Color.WHITE
 
 
+func _refresh_scale_buttons() -> void:
+	for mode: int in _scale_buttons:
+		_scale_buttons[mode].modulate = Palette.ACCENT if mode == _scale else Color.WHITE
+
+
 ## Enable only the orders that are legal right now (ADR 0015).
 func _refresh_actions() -> void:
 	var available := Travel.available(_context())
 	for id: String in _action_buttons:
 		_action_buttons[id].disabled = not bool(available.get(id, false))
+	# Focus is a view request, not a travel order — gate it on "selection has moons".
+	if _action_buttons.has("focus"):
+		_action_buttons["focus"].disabled = not _selection_has_moons()
+
+
+## Does the current selection (a body) have any moons? (ADR 0022)
+func _selection_has_moons() -> bool:
+	if _sel_kind != Travel.TargetKind.BODY:
+		return false
+	var system := TypeRegistry.get_system(GameState.system.system_id)
+	if system == null:
+		return false
+	for body: BodyData in system.bodies:
+		if body.kind == BodyData.Kind.MOON and body.parent_id == _sel_id:
+			return true
+	return false
 
 
 func _context() -> Dictionary:
 	var ship: ShipState = GameState.ship
 	var location_body := _resolve_body(ship.location_body_id)
+	var is_contact := _sel_kind == Travel.TargetKind.CONTACT
+	var contact := _resolve_contact(_sel_id) if is_contact else null
 	return {
 		"location": ship.location,
 		"location_can_dock": location_body != null and location_body.can_dock,
 		"in_transit": _in_transit(),
 		"has_course": _has_course(),
-		"nav_target_id": _target_id,
-		"nav_target_is_here": _target_id != "" and _target_id == ship.location_body_id \
+		"nav_target_id": _sel_id,
+		"nav_target_is_here": _sel_kind == Travel.TargetKind.BODY and _sel_id == ship.location_body_id \
 			and ship.location != Travel.Location.DEEP_SPACE,
+		"has_nav_selection": _sel_kind != Travel.TargetKind.NONE,
+		"nav_target_is_contact": is_contact,
+		"nav_target_in_range": contact != null \
+			and ship.position.distance_to(contact.position) <= ship.sensor_range,
+		"nav_target_tier": GameState.contacts.tier_of(_sel_id) if is_contact else Sensors.Tier.UNDETECTED,
 	}
 
 
 func _refresh_preview() -> void:
-	var body := _resolve_body(_target_id)
-	if body == null:
+	if _sel_kind == Travel.TargetKind.NONE:
 		_target_readout.set_value(tr("HELM_NO_TARGET"))
 		_distance_readout.set_value("—")
 		_eta_readout.set_value("—")
 		_rm_readout.set_value("—")
 		return
-	var preview := FlightMath.preview(GameState.ship.position, body.position, _burn,
+	var preview := FlightMath.preview(GameState.ship.position, _selected_position(), _burn,
 		GameState.ship.reaction_mass)
-	_target_readout.set_value(tr(body.name_key))
+	_target_readout.set_value(_selected_name())
 	_distance_readout.set_value(_format_distance(preview["distance"]))
 	_eta_readout.set_value(_format_eta(preview["eta_ticks"]))
 	var rm_text := _format_rm(preview["rm_cost"])
@@ -290,12 +394,11 @@ func _refresh_status() -> void:
 	var visual := _status_visual()
 	_status_light.set_state(visual[0], visual[1], visual[2])
 
-	var body := _resolve_body(String(GameState.ship.current_order.get("target_id", "")))
-	if body == null:
+	if not _has_course():
 		_status_distance.set_value("—")
 		_status_eta.set_value("—")
 		return
-	var dist: float = GameState.ship.position.distance_to(body.position)
+	var dist: float = GameState.ship.position.distance_to(_order_destination())
 	_status_distance.set_value(_format_distance(dist))
 	if _in_transit():
 		_status_eta.set_value(_format_eta(FlightMath.eta_ticks(dist,
@@ -309,10 +412,9 @@ func _refresh_status() -> void:
 func _status_visual() -> Array:
 	var ship: ShipState = GameState.ship
 	if _in_transit():
-		var body := _resolve_body(String(ship.current_order.get("target_id", "")))
 		var bound := tr("TRAVEL_BOUND_FOR").format({
 			"phase": tr(FlightCore.state_key(_flight_state)),
-			"body": tr(body.name_key) if body != null else "",
+			"body": _order_destination_name(),
 		})
 		return [Palette.STATUS_NOMINAL, "»", bound]
 	match ship.location:
@@ -342,6 +444,29 @@ func _in_transit() -> bool:
 
 func _has_course() -> bool:
 	return String(GameState.ship.current_order.get("type", "")) == "course"
+
+
+## Destination point of the laid-in course (body position or frozen dest, ADR 0020).
+func _order_destination() -> Vector2:
+	var order: Dictionary = GameState.ship.current_order
+	var body := _resolve_body(String(order.get("target_id", "")))
+	if body != null:
+		return body.position
+	return order.get("dest", GameState.ship.position)
+
+
+## Display name of the laid-in course destination (body / contact / waypoint).
+func _order_destination_name() -> String:
+	var id := String(GameState.ship.current_order.get("target_id", ""))
+	var body := _resolve_body(id)
+	if body != null:
+		return tr(body.name_key)
+	var contact := _resolve_contact(id)
+	if contact != null:
+		if GameState.contacts.tier_of(id) == Sensors.Tier.IDENTIFIED:
+			return tr(contact.name_key)
+		return tr("NAV_CONTACT_UNKNOWN")
+	return tr("NAV_WAYPOINT")
 
 
 func _location_name() -> String:
@@ -378,3 +503,48 @@ func _resolve_body(target_id: String) -> BodyData:
 		if body.id == target_id:
 			return body
 	return null
+
+
+func _resolve_contact(contact_id: String) -> ContactData:
+	if contact_id == "":
+		return null
+	var system := TypeRegistry.get_system(GameState.system.system_id)
+	if system == null:
+		return null
+	for contact: ContactData in system.contacts:
+		if contact.id == contact_id:
+			return contact
+	return null
+
+
+## Destination point of the current selection (body/contact position or the point).
+func _selected_position() -> Vector2:
+	match _sel_kind:
+		Travel.TargetKind.BODY:
+			var body := _resolve_body(_sel_id)
+			return body.position if body != null else GameState.ship.position
+		Travel.TargetKind.CONTACT:
+			var contact := _resolve_contact(_sel_id)
+			return contact.position if contact != null else GameState.ship.position
+		Travel.TargetKind.POINT:
+			return _sel_point
+	return GameState.ship.position
+
+
+## Display name of the current selection. An un-identified contact reads as
+## "unknown" until scanned; a free point is a "Waypoint" (ADR 0012/0020).
+func _selected_name() -> String:
+	match _sel_kind:
+		Travel.TargetKind.BODY:
+			var body := _resolve_body(_sel_id)
+			return tr(body.name_key) if body != null else tr("HELM_NO_TARGET")
+		Travel.TargetKind.CONTACT:
+			var contact := _resolve_contact(_sel_id)
+			if contact == null:
+				return tr("HELM_NO_TARGET")
+			if GameState.contacts.tier_of(_sel_id) == Sensors.Tier.IDENTIFIED:
+				return tr(contact.name_key)
+			return tr("NAV_CONTACT_UNKNOWN")
+		Travel.TargetKind.POINT:
+			return tr("NAV_WAYPOINT")
+	return tr("HELM_NO_TARGET")

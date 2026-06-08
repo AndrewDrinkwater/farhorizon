@@ -20,6 +20,17 @@ signal order_belayed()
 
 # --- Helm / Nav Plot (ADR 0013) — UI compose-time selection ---
 signal nav_target_selected(target_id: String)
+## Burn intensity selected on the Helm — the nav views recompute travel-time
+## annotations (ETA badges, isochrone rings) burn-aware (ADR 0019).
+signal nav_burn_changed(burn: int)
+## Empty-space waypoint selected on a nav view (ADR 0020) — a course destination
+## with no entity id. Bodies/contacts still use nav_target_selected(id).
+signal nav_point_selected(point: Vector2)
+## Orrery scale mode flipped on the Helm (ADR 0021) — OrreryParams.ScaleMode.
+signal nav_scale_changed(mode: int)
+## A moon-bearing planet was focused / the focus inset closed (ADR 0022).
+signal nav_focus_requested(body_id: String)
+signal nav_focus_closed()
 
 # --- Flight (ADR 0005) ---
 signal flight_state_changed(state: int)

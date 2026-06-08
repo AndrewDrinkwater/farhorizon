@@ -9,6 +9,7 @@ const TimeControlsScene := preload("res://src/ui/shell/time_controls.gd")
 const HelmConsoleScene := preload("res://src/ui/consoles/helm_console.gd")
 const OrreryViewScene := preload("res://src/world/orrery_view.gd")
 const TacticalViewScene := preload("res://src/world/tactical_view.gd")
+const MoonInsetViewScene := preload("res://src/world/moon_inset_view.gd")
 const DebugOverlay := preload("res://src/ui/components/debug_overlay.gd")
 
 ## Starting system until a save/new-game flow chooses one.
@@ -79,3 +80,9 @@ func _build_ui() -> void:
 	root.add_child(time_controls)
 
 	root.add_child(HelmConsoleScene.new())
+
+	# Focus inset draws over the console (ADR 0022); hidden until a planet is focused.
+	if system != null:
+		var inset := MoonInsetViewScene.new()
+		root.add_child(inset)
+		inset.build(system)

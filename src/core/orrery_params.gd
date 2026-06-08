@@ -4,6 +4,11 @@ extends RefCounted
 ## fills `center`/rings from the viewport; the rest are play-tuned constants.
 ## `center` and the ring radii are screen pixels; the `r_*` clamps are real wu.
 
+## Radius mapping (ADR 0021). LOG = schematic (whole system on screen); LINEAR =
+## true scale (radius proportional to real distance). Bearing is exact in both.
+enum ScaleMode { LOG, LINEAR }
+var mode: int = ScaleMode.LOG
+
 var center: Vector2 = Vector2.ZERO
 ## Real radius (wu) mapped to the inner/outer ring; clamp outside this band.
 var r_min: float = 300.0       # ~0.3 AU

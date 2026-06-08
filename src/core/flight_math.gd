@@ -71,6 +71,15 @@ static func eta_ticks(dist: float, burn: int) -> int:
 	return int(ceil(dist / speed_wu_per_tick(burn)))
 
 
+## Distance (wu) reachable in `ticks` at `burn` — the inverse of `eta_ticks`,
+## used to place the tactical scope's isochrone rings (ADR 0019). Speed is
+## constant per burn, so reach is linear in ticks. Non-positive ticks → 0.
+static func reach_wu(burn: int, ticks: int) -> float:
+	if ticks <= 0:
+		return 0.0
+	return speed_wu_per_tick(burn) * float(ticks)
+
+
 ## Reaction mass spent to traverse `dist` at `burn` (linear in distance).
 static func rm_cost(dist: float, burn: int) -> float:
 	if dist <= 0.0:

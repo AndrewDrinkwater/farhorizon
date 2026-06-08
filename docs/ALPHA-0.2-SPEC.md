@@ -11,7 +11,8 @@ Plot draws them through a tested projection, adds body hierarchy (moons), and
 folds in sensor range so navigation has decisions beyond "fly to the big rock."
 
 Decisions: **ADR 0016** (orrery), **ADR 0017** (sensors/contacts), **ADR 0018**
-(hierarchical bodies). Implementation companion: **`docs/navigation.md`**.
+(hierarchical bodies), **ADR 0019** (travel-time legibility). Implementation
+companion: **`docs/navigation.md`**.
 
 ---
 
@@ -34,12 +35,18 @@ Decisions: **ADR 0016** (orrery), **ADR 0017** (sensors/contacts), **ADR 0018**
 4. **Tactical scope.** A ship-centred, **true-scale** view shows the sensor range
    as a real circle with contacts inside it (the orrery never draws the warped
    bubble).
-5. **It reads well.** A captain can take in the whole system at a glance, see
+5. **Travel time is legible (ADR 0019).** Both nav views make time explicit and
+   **burn-aware** (recomputed when the Helm burn selector changes): the orrery
+   shows per-body ETA badges and a time-pip course line; the tactical scope draws
+   isochrone rings for the selected burn. The captain can read "how long to
+   anything" at a glance without opening the Course Order panel.
+6. **It reads well.** A captain can take in the whole system at a glance, see
    where moons and contacts are, and target any of them — with none of the
    40 AU "everything's a dot in a corner" problem.
-6. **Green tests.** GUT covers the `core`: orrery projection (incl. moons +
+7. **Green tests.** GUT covers the `core`: orrery projection (incl. moons +
    bearing/monotonicity), sensor detection (incl. boundary + segment crossing),
-   and contact-state save round-trip.
+   contact-state save round-trip, and `FlightMath.reach_wu` (round-trips against
+   `eta_ticks`).
 
 ---
 
@@ -58,6 +65,9 @@ Decisions: **ADR 0016** (orrery), **ADR 0017** (sensors/contacts), **ADR 0018**
 - **Tactical scope** — true-scale ship-centred view + sensor circle, on the Helm.
 - **Sensor radius** as a ship/hull base stat (a constant now; a hook for crew /
   refit later).
+- **Travel-time legibility (ADR 0019)** — `FlightMath.reach_wu` (pure, tested);
+  burn-aware per-body ETA badges + time-pip course line on the orrery; isochrone
+  rings on the tactical scope; views recompute on a burn-selector change.
 - Feel pass on the tuning knobs.
 
 ## Out of scope (deferred)
@@ -91,8 +101,11 @@ Each step ends runnable and, where it's `core`, tested.
 7. **Focus-a-body sub-view** — expand a planet to inspect/target its moons
    (may be trimmed/deferred if step 3's render is already legible enough).
 8. **Tactical scope** — true-scale ship-centred view, sensor circle + contacts.
-9. **Feel pass** — log base / ring band, moon cluster band, sensor radius,
-   contact glyphs. DEVLOG; confirm ADRs 0016/0017/0018.
+9. **Travel-time legibility (ADR 0019)** — `FlightMath.reach_wu` + tests;
+   burn-aware per-body ETA badges + time-pip course line on the orrery; isochrone
+   rings on the tactical scope; recompute the views on a burn-selector change.
+10. **Feel pass** — log base / ring band, moon cluster band, sensor radius,
+    contact glyphs, isochrone steps. DEVLOG; confirm ADRs 0016/0017/0018/0019.
 
 ---
 
@@ -102,5 +115,6 @@ Each step ends runnable and, where it's `core`, tested.
 - Moon local band (`moon_r_min/max`, `moon_ring_inner/outer`).
 - Sensor radius (per hull); default tactical-scope zoom.
 - Contact glyphs/shapes per kind; ring opacity.
+- Isochrone ring durations + the orrery course-line time-pip interval (ADR 0019).
 
 None of these touch logic — they're data/constants, tuned late, like α0.1.

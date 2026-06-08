@@ -57,6 +57,32 @@ func test_preview_flags_insufficient_fuel() -> void:
 	assert_false(p["affordable"], "1 RM cannot afford a long hard burn")
 
 
+func test_reach_wu_round_trips_against_eta() -> void:
+	# reach_wu(burn, eta_ticks(d, burn)) should recover d to within one tick's
+	# travel — eta rounds ticks up, so reach is the distance at that whole tick.
+	for burn: int in [FlightMath.Burn.ECONOMY, FlightMath.Burn.STANDARD, FlightMath.Burn.HARD]:
+		var d := 7350.0
+		var ticks := FlightMath.eta_ticks(d, burn)
+		var reach := FlightMath.reach_wu(burn, ticks)
+		var one_tick := FlightMath.speed_wu_per_tick(burn)
+		assert_almost_eq(reach, d, one_tick, "reach within one tick of the original distance")
+		assert_true(reach >= d, "rounded-up ETA reaches at least the distance")
+
+
+func test_reach_wu_higher_burn_goes_farther() -> void:
+	var t := 20
+	var eco := FlightMath.reach_wu(FlightMath.Burn.ECONOMY, t)
+	var std := FlightMath.reach_wu(FlightMath.Burn.STANDARD, t)
+	var hard := FlightMath.reach_wu(FlightMath.Burn.HARD, t)
+	assert_lt(eco, std, "economy covers least in fixed time")
+	assert_lt(std, hard, "hard covers most in fixed time")
+
+
+func test_reach_wu_zero_or_negative_ticks_is_zero() -> void:
+	assert_eq(FlightMath.reach_wu(FlightMath.Burn.STANDARD, 0), 0.0)
+	assert_eq(FlightMath.reach_wu(FlightMath.Burn.HARD, -5), 0.0)
+
+
 func test_invalid_burn_is_reported() -> void:
 	assert_true(FlightMath.is_valid_burn(FlightMath.Burn.ECONOMY))
 	assert_false(FlightMath.is_valid_burn(99), "unknown burn id rejected")

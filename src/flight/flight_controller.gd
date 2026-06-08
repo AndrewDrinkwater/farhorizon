@@ -44,28 +44,48 @@ func _on_order_issued(order: Dictionary) -> void:
 			_dock()
 		"undock":
 			_undock()
+		"scan":
+			_scan(order)
 		_:
 			EventBus.order_rejected.emit("ORDER_REJECT_UNKNOWN")
 
 
+## Lay in a course to a body, a detected contact, or a free point (ADR 0020).
+## A body/contact is given by `target_id`; a free point by `point` (target_id "").
 func _set_course(order: Dictionary) -> void:
 	var target_id := String(order.get("target_id", ""))
 	var burn := int(order.get("burn", FlightMath.Burn.STANDARD))
 	if _is_under_way():
 		EventBus.order_rejected.emit("ORDER_REJECT_UNDERWAY")
 		return
-	if _resolve_body(target_id) == null:
-		EventBus.order_rejected.emit("ORDER_REJECT_TARGET_UNKNOWN")
-		return
 	if not FlightMath.is_valid_burn(burn):
 		EventBus.order_rejected.emit("ORDER_REJECT_BURN_INVALID")
 		return
-	if target_id == GameState.ship.location_body_id and GameState.ship.location != Travel.Location.DEEP_SPACE:
+	# Resolve the destination point from whichever kind of target this is.
+	var dest: Vector2
+	var body := _resolve_body(target_id)
+	if body != null:
+		dest = body.position
+	elif target_id != "":
+		var contact := _resolve_contact(target_id)
+		if contact == null or GameState.contacts.tier_of(target_id) == Sensors.Tier.UNDETECTED:
+			EventBus.order_rejected.emit("ORDER_REJECT_TARGET_UNKNOWN")
+			return
+		dest = contact.position
+	else:
+		dest = order.get("point", GameState.ship.position)
+	# "Already here": the body we're holding/docked at, or a point we're sitting on.
+	if body != null and target_id == GameState.ship.location_body_id \
+			and GameState.ship.location != Travel.Location.DEEP_SPACE:
+		EventBus.order_rejected.emit("ORDER_REJECT_ALREADY_HERE")
+		return
+	if body == null and FlightCore.has_arrived(GameState.ship.position, dest):
 		EventBus.order_rejected.emit("ORDER_REJECT_ALREADY_HERE")
 		return
 	GameState.ship.current_order = {
 		"type": "course",
 		"target_id": target_id,
+		"dest": dest,
 		"burn": burn,
 		"engaged": false,
 		"origin": GameState.ship.position,
@@ -85,13 +105,9 @@ func _engage() -> void:
 		EventBus.order_rejected.emit("ORDER_REJECT_DOCKED")
 		return
 	var order: Dictionary = GameState.ship.current_order
-	var body := _resolve_body(String(order.get("target_id", "")))
-	if body == null:
-		EventBus.order_rejected.emit("ORDER_REJECT_TARGET_UNKNOWN")
-		return
 	var burn := int(order.get("burn", FlightMath.Burn.STANDARD))
 	# Fuel must bite: refuse a course the tank can't complete (ADR 0005).
-	var cost := FlightMath.rm_cost(GameState.ship.position.distance_to(body.position), burn)
+	var cost := FlightMath.rm_cost(GameState.ship.position.distance_to(_destination(order)), burn)
 	if cost > GameState.ship.reaction_mass:
 		EventBus.order_rejected.emit("ORDER_REJECT_INSUFFICIENT_RM")
 		return
@@ -150,6 +166,26 @@ func _dock() -> void:
 	_notify_context()
 
 
+## Scan a contact to identify it (ADR 0017/0020): BLIP → IDENTIFIED. Legal only
+## within sensor range and while it's an un-identified contact.
+func _scan(order: Dictionary) -> void:
+	var contact_id := String(order.get("contact_id", ""))
+	var contact := _resolve_contact(contact_id)
+	if contact == null:
+		EventBus.order_rejected.emit("ORDER_REJECT_TARGET_UNKNOWN")
+		return
+	if GameState.ship.position.distance_to(contact.position) > GameState.ship.sensor_range:
+		EventBus.order_rejected.emit("ORDER_REJECT_OUT_OF_RANGE")
+		return
+	if GameState.contacts.tier_of(contact_id) == Sensors.Tier.IDENTIFIED:
+		EventBus.order_rejected.emit("ORDER_REJECT_ALREADY_SCANNED")
+		return
+	GameState.contacts.set_tier(contact_id, Sensors.Tier.IDENTIFIED)
+	EventBus.contact_promoted.emit(contact_id, Sensors.Tier.IDENTIFIED)
+	_acknowledge("VOICE_SHIP_SCAN_COMPLETE")
+	_notify_context()
+
+
 ## Undock back to the station's holding area.
 func _undock() -> void:
 	if GameState.ship.location != Travel.Location.DOCKED:
@@ -182,6 +218,7 @@ func _on_sim_tick(_tick: int) -> void:
 		return
 	var body := _resolve_body(String(order.get("target_id", "")))
 	if body == null:
+		_step_to_point(order)  # contact or free point — drift to rest on arrival
 		return
 	var center: Vector2 = body.position
 	var burn := int(order.get("burn", FlightMath.Burn.STANDARD))
@@ -207,6 +244,37 @@ func _on_sim_tick(_tick: int) -> void:
 	else:
 		var origin: Vector2 = order.get("origin", new_pos)
 		_set_state(FlightCore.executing_state(origin, center, new_pos, burn))
+
+
+## Fly one tick toward a contact / free point (no holding ring). On arrival the
+## ship drifts: stop on the point, drop the course, go IDLE in deep space (ADR 0020).
+func _step_to_point(order: Dictionary) -> void:
+	var dest: Vector2 = _destination(order)
+	var burn := int(order.get("burn", FlightMath.Burn.STANDARD))
+	var prev_pos: Vector2 = GameState.ship.position
+	if FlightCore.has_arrived(prev_pos, dest):
+		_arrive_point(dest)
+		return
+	GameState.ship.heading = (dest - prev_pos).angle()
+	var new_pos: Vector2 = FlightCore.step_position(prev_pos, dest, burn)
+	GameState.ship.position = new_pos
+	_spend_reaction_mass(FlightMath.rm_cost(prev_pos.distance_to(new_pos), burn))
+	if FlightCore.has_arrived(new_pos, dest):
+		_arrive_point(dest)
+	else:
+		var origin: Vector2 = order.get("origin", new_pos)
+		_set_state(FlightCore.executing_state(origin, dest, new_pos, burn))
+
+
+## Arrival at a contact / free point: rest on it and drift (no orbit, no body).
+func _arrive_point(dest: Vector2) -> void:
+	GameState.ship.position = dest
+	GameState.ship.location = Travel.Location.DEEP_SPACE
+	GameState.ship.location_body_id = ""
+	GameState.ship.current_order = {}
+	_set_state(FlightCore.State.IDLE)
+	_acknowledge("VOICE_SHIP_ARRIVED")
+	_notify_context()
 
 
 ## Arrival: settle onto the body's holding ring (not its centre) at the approach
@@ -284,14 +352,19 @@ func _resync_after_load() -> void:
 		_set_state(FlightCore.State.IDLE)
 	else:
 		var order: Dictionary = GameState.ship.current_order
-		var body := _resolve_body(String(order.get("target_id", "")))
-		if body == null:
-			_set_state(FlightCore.State.IDLE)
-		else:
-			var origin: Vector2 = order.get("origin", GameState.ship.position)
-			_set_state(FlightCore.executing_state(origin, body.position, GameState.ship.position,
-				int(order.get("burn", FlightMath.Burn.STANDARD))))
+		var origin: Vector2 = order.get("origin", GameState.ship.position)
+		_set_state(FlightCore.executing_state(origin, _destination(order), GameState.ship.position,
+			int(order.get("burn", FlightMath.Burn.STANDARD))))
 	_notify_context()
+
+
+## The destination point of a course: a body's live position (bodies may move
+## later) or the frozen `dest` for a contact / free point (ADR 0020).
+func _destination(order: Dictionary) -> Vector2:
+	var body := _resolve_body(String(order.get("target_id", "")))
+	if body != null:
+		return body.position
+	return order.get("dest", GameState.ship.position)
 
 
 func _resolve_body(target_id: String) -> BodyData:
@@ -303,4 +376,16 @@ func _resolve_body(target_id: String) -> BodyData:
 	for body: BodyData in system.bodies:
 		if body.id == target_id:
 			return body
+	return null
+
+
+func _resolve_contact(contact_id: String) -> ContactData:
+	if contact_id == "":
+		return null
+	var system := TypeRegistry.get_system(GameState.system.system_id)
+	if system == null:
+		return null
+	for contact: ContactData in system.contacts:
+		if contact.id == contact_id:
+			return contact
 	return null

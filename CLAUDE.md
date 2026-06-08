@@ -10,13 +10,13 @@ a mission clock. Being rebuilt deliberately from scratch; α0.1 = "The Ship Flie
 
 ## Where the decisions live (read before changing architecture)
 - `ARCHITECTURE.md` — the system design (autoloads, EventBus, clock, flight, UI).
-- `docs/ALPHA-0.2-SPEC.md` — current milestone + **build order** (you work this).
-  `docs/ALPHA-0.1-SPEC.md` is the completed first milestone (history).
+- `docs/ALPHA-0.3-SPEC.md` — current milestone + **build order** (you work this).
+  `docs/ALPHA-0.1-SPEC.md` / `docs/ALPHA-0.2-SPEC.md` are completed milestones.
 - `docs/CONVENTIONS.md` — canonical units, versioning, style.
 - `docs/consoles/helm.md` — the first console (flight + navigation).
 - `docs/navigation.md` — the orrery + sensor navigation model with the pure
   `core` function contracts and test outlines (planned for α0.2).
-- `docs/adr/0001..0018` — one decision per file. **If you change a decision,
+- `docs/adr/0001..0022` — one decision per file. **If you change a decision,
   add/supersede an ADR.**
 - `DEVLOG.md` — append a short entry per work session (newest on top).
 
@@ -89,17 +89,30 @@ localization/  strings.csv
   numeric constants are sensible baselines, not play-tuned (they're clearly
   marked; none touch logic).
 - **α0.2 "Navigation II" — mostly built** (`docs/ALPHA-0.2-SPEC.md`; ADRs
-  0016/0017/0018 accepted). Done: orrery Nav Plot (`OrreryView`, screen-space log
-  projection — real AU distances unchanged), moons (`BodyData.parent_id` +
+  0016/0017/0018/0019 accepted). Done: orrery Nav Plot (`OrreryView`, screen-space
+  log projection — real AU distances unchanged), moons (`BodyData.parent_id` +
   parent-relative `project_child`), sensor/contact model (`Sensors`,
-  `SensorController` on sim_tick, `ContactsState` saved, contacts wink in/out),
-  and the true-scale tactical scope (`TacticalView`, **T** to toggle). Pure core
-  (`OrreryProjection`, `Sensors`) GUT-tested. **103 tests green.**
-- **Remaining in α0.2:** step 7 focus-a-body moon sub-view (deferred to α0.3 —
-  moons are already directly targetable on the orrery) and step 9 feel pass
-  (orrery log band / sensor radius / glyphs — tune in-engine by F5).
-- **Next:** play-tune the nav feel, then scope α0.3 (focus sub-view, scan/identify
-  action, or a second console) — write the spec before building, as before.
+  `SensorController` on sim_tick, `ContactsState` saved, contacts wink in/out), the
+  true-scale tactical scope (`TacticalView`, **T** to toggle), and travel-time
+  legibility (ADR 0019: `FlightMath.reach_wu`, burn-aware per-body ETA badges +
+  time-pip course line on the orrery, isochrone rings on the scope, via
+  `EventBus.nav_burn_changed`). Pure core (`OrreryProjection`, `Sensors`,
+  `FlightMath`) GUT-tested. **106 tests green.**
+- **α0.2 feel pass still open** (build step 10 — orrery log band / sensor radius /
+  glyphs / time-pip interval / isochrone steps — tune in-engine by F5); the
+  focus-a-body moon sub-view stays deferred (moons are directly targetable).
+- **α0.3 "Navigation III: Targets & the Scan" — in progress** (`docs/ALPHA-0.3-SPEC.md`;
+  **ADR 0020/0021/0022** accepted). Done: generalized course (`current_order.dest`
+  — body/contact/free-point; drift-on-arrival for non-bodies), empty-space
+  waypoints (`nav_point_selected`, `OrreryProjection.unproject`, crosshair marker),
+  the **scan** action (BLIP → IDENTIFIED, in-range gated, Helm Scan button,
+  unknown-vs-named rendering), the **orrery scale toggle** (`OrreryParams.mode`
+  LOG/LINEAR, Helm `Schematic | True scale` control), **moon orbit rings**, and the
+  **focus inset** (`MoonInsetView` PiP, "has-moons" affordance, Helm Focus button +
+  re-click, `nav_focus_requested`/`closed`). **129 tests green.**
+- **Next:** α0.3 feel pass (waypoint/contact glyphs, scan range cue, scale
+  readability, satellite halo, inset size); then scope the next slice (station-
+  keeping hold, survey rung, or a second console) — write the spec before building.
 
 ## Workflow expectations
 - Keep `DEVLOG.md` updated; add an ADR for any architectural fork.

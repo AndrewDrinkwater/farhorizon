@@ -185,16 +185,60 @@ colour alone.
 
 ---
 
-## Suggested build order (α0.2 navigation slice)
+## Travel-time legibility (ADR 0019)
 
-1. `OrreryProjection` core + tests.
-2. Swap the Nav Plot layout to the orrery (display only; orbit rings → projected
-   radii). Confirm the whole system reads on one screen.
-3. `ContactData` type + author a couple of transient entities into `SystemData`.
-4. `Sensors` core + tests; tick-driven detection node; `EventBus` contact
+The orrery's log compression strips *time* out of the geometry — equal screen
+distance ≠ equal travel time. Fix: on a schematic, **label** magnitude, don't
+read it. Everything here is **burn-aware** (recompute on a burn-selector change).
+
+**Orrery — time labelled:**
+- **Per-body ETA badges:** each charted body shows time-to-reach at the selected
+  burn (`FlightMath.eta_ticks(dist, burn)` → duration via the calendar helper).
+- **Time-pip course line:** the plotted line is graduated with a pip per fixed
+  time unit and tagged with its ETA, so leg length reads as duration.
+
+**Tactical scope — time as rings:** concentric **isochrone rings** at fixed
+durations for the selected burn, drawn as clean circles next to the sensor
+circle. Read "how long to anything" by which ring it falls in. Isochrones live
+*here*, not on the orrery: a ship-centred time-circle would warp on the
+star-centred chart (same reason the sensor boundary isn't drawn on the orrery);
+on the true-scale scope it stays a circle.
+
+**New pure helper** (`FlightMath`, inverse of `eta_ticks`) for placing rings:
+
+```gdscript
+# Distance (wu) reachable in `ticks` at a burn.
+static func reach_wu(burn: int, ticks: int) -> float:
+    return speed_wu_per_tick(burn) * float(ticks)
+```
+
+**Test outline:** `reach_wu(burn, eta_ticks(d, burn))` ≈ `d` (round-trips within
+one tick's distance); Hard reaches farther than Standard than Economy for the
+same ticks; `ticks == 0` → 0.
+
+Rejected: a time-based orrery projection (compress by ETA, not distance) — the
+map would re-flow as the ship moves or the burn changes; keep the layout stable
+(distance), annotate the variable (time).
+
+---
+
+## Build order
+
+The canonical α0.2 build order lives in `docs/ALPHA-0.2-SPEC.md` (it covers the
+whole milestone — moons and the focus-a-body sub-view as well as the navigation
+slice below). The nav-specific steps that doc folds in, in order:
+
+1. `OrreryProjection` core + tests; swap the Nav Plot layout to the orrery
+   (display only; orbit rings → projected radii) — the whole system on one screen.
+2. `ContactData` type + a couple of transient entities in `SystemData`.
+3. `Sensors` core + tests; tick-driven detection node; `EventBus` contact
    signals; `GameState` detected/tier state (saved).
-5. Orrery renders transient contacts (shape icons) winking in/out.
-6. Tactical scope view on the Helm (true scale, sensor circle + contacts).
-7. Feel pass (log base, ring band, sensor radius), DEVLOG entry, confirm ADRs.
+4. Orrery renders transient contacts (shape icons) winking in/out.
+5. Tactical scope view on the Helm (true scale, sensor circle + contacts).
+6. **Travel-time legibility (ADR 0019):** `FlightMath.reach_wu` + tests; per-body
+   ETA badges + time-pip course line on the orrery; burn-aware isochrone rings on
+   the tactical scope; recompute on burn change.
+7. Feel pass (log base, ring band, sensor radius, isochrone steps), DEVLOG entry,
+   confirm ADRs.
 
 Keep pure logic in `core` with green GUT tests before the nodes are called done.

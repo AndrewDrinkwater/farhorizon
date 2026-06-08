@@ -54,6 +54,8 @@ HELM_NO_TARGET,— none —
 HELM_ETA_FORMAT,{hours}h {mins}m
 HELM_DISTANCE_FORMAT,{wu} wu
 HELM_RM_FORMAT,{rm} RM
+NAV_DURATION_HM,{hours}h {mins}m
+NAV_DURATION_M,{mins}m
 ORDER_REJECT_NOT_AT_BODY,Unable — not at a body.
 ORDER_REJECT_NOT_IN_ORBIT,Unable — not in orbit.
 ORDER_REJECT_UNDERWAY,Unable — already under way.
@@ -65,6 +67,16 @@ ORDER_REJECT_NOT_HOLDING,Unable — not in a holding area.
 VOICE_SHIP_ARRIVED,Arrived. Holding station.
 VOICE_SHIP_UNDOCKED,Undocked. Holding station.
 HELM_UNDOCK,Undock
+HELM_SCAN,Scan
+HELM_FOCUS,Focus
+HELM_SCALE_LABEL,Scale
+HELM_SCALE_SCHEMATIC,Schematic
+HELM_SCALE_TRUE,True scale
+NAV_WAYPOINT,Waypoint
+NAV_CONTACT_UNKNOWN,Unknown contact
+VOICE_SHIP_SCAN_COMPLETE,Scan complete. Contact identified.
+ORDER_REJECT_OUT_OF_RANGE,Unable — target out of sensor range.
+ORDER_REJECT_ALREADY_SCANNED,Unable — already identified.
 TRAVEL_DEEP_SPACE,Deep Space
 TRAVEL_HOLDING,Holding
 TRAVEL_DOCKED,Docked

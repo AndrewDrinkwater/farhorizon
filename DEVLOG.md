@@ -4,6 +4,124 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-08 — α0.3: orrery scale toggle + moon rings + focus inset
+
+Three nav-view slices (ADR 0021 + 0022), built B→A→C.
+
+- **Moon orbit rings (B):** the orrery ring pass now draws a faint ring per moon
+  about its parent's projected point; skipped when they collapse in true scale.
+- **Orrery scale toggle (A, ADR 0021):** `OrreryParams.mode {LOG, LINEAR}`;
+  `OrreryProjection` branches on the radius map only (same signatures) — LINEAR is
+  true-scale (`r_max → ring_outer`), `project_path` collapses to `project`, moons
+  take their real scaled offset. `EventBus.nav_scale_changed`; a Helm segmented
+  control (`Schematic | True scale`) mirroring the burn selector, initial-broadcast
+  on `_ready`. 6 LINEAR projection tests; LOG tests unchanged.
+- **Focus inset (C, ADR 0022):** a "has-moons" affordance on the orrery (satellite
+  halo + a pip per moon, capped); a Helm **Focus** button gated on
+  "selection has moons" **plus re-click** the selected planet, both emitting
+  `nav_focus_requested`. New `MoonInsetView` (a `MOUSE_FILTER_STOP` Control PiP,
+  top-centre) shows the planet + its moons spread out via the pure
+  `OrreryProjection.project_satellite` (tested), each on its own ring and clickable
+  → `nav_target_selected` (moons are bodies, so the existing course/scan pipeline
+  flies to them). ✕ closes (`nav_focus_closed`). Closes the α0.2 step-7 deferral.
+
+**129 GUT tests green** (was 118). Feel pass still open (scale readability, halo
+style, inset size/position). ADRs 0021 + 0022 confirmed.
+
+---
+
+## 2026-06-08 — α0.3: nav targets (contacts + waypoints) + the scan action
+
+Opened α0.3 ("Navigation III: Targets & the Scan") — spec + **ADR 0020**. The
+captain can now plot a course to anything on the Nav Plot, and identify contacts.
+
+- **Generalized course (ADR 0020):** `current_order` carries a frozen `dest:
+  Vector2` alongside `target_id` (a body id, a contact id, or "" for a free
+  point). `FlightController` resolves the destination per kind and arrival per
+  kind: a **body** still settles into its holding orbit; a **contact or free
+  point** *drifts* — stops on the point, drops the course, IDLE in deep space.
+  Engage fuel-gates on the resolved `dest`. Resync-after-load generalized.
+- **Empty-space waypoints:** new `EventBus.nav_point_selected(point)`; both views
+  pick the nearest body/detected-contact under the cursor, else drop a waypoint —
+  orrery via the new pure `OrreryProjection.unproject` (inverse log map), tactical
+  scope via its true scale. A crosshair marks the selected point.
+- **Scan action:** `{type:"scan", contact_id}` — legal only in sensor range, on a
+  BLIP; promotes BLIP → IDENTIFIED (`contact_promoted`, saved). Helm **Scan**
+  button gated by `Travel.available` (new `scan` + `has_nav_selection`).
+- **Identity reads:** an unscanned contact is a hollow diamond labelled "Unknown
+  contact"; scanning fills the diamond and reveals the authored name (shape +
+  label, not colour — ADR 0012), on orrery + scope.
+- **Tests:** `unproject` round-trips `project`; `Travel.available` scan/selection
+  rules; `FlightController` point course, contact course, undetected-reject, scan
+  in/out of range. **118 GUT tests green** (was 109).
+
+Deferred (ADR 0020): station-keeping/"hold at a point", survey rung beyond
+IDENTIFIED, multi-waypoint queues. Feel pass (markers, glyphs) still to do.
+
+---
+
+## 2026-06-08 — Build: travel-time legibility (ADR 0019, α0.2 step 9)
+
+Built the ADR 0019 slice — time is now explicit on both nav views and burn-aware
+(recomputes when the Helm burn selector changes).
+
+- **Core:** `FlightMath.reach_wu(burn, ticks)` (inverse of `eta_ticks`; non-positive
+  ticks → 0). 3 tests: round-trips against `eta_ticks` within one tick's distance,
+  monotonic in burn, zero/negative guard. **106/106 green.**
+- **Wiring:** new `EventBus.nav_burn_changed(burn)`; `HelmConsole` emits it on burn
+  select + once on `_ready` to sync the views. Views mirror the burn and redraw.
+- **Orrery (`OrreryView`):** per-body **ETA badge** under each label (`eta_ticks`
+  ship→body at the selected burn; star excluded — it's the hub); **time-pip course
+  line** — a pip every `PIP_TICKS` (30) in-game minutes along the real path (even
+  fractions, since speed is constant per burn; the projection warps the spacing),
+  tagged with the leg ETA at the midpoint.
+- **Tactical scope (`TacticalView`):** **isochrone rings** for `ISOCHRONE_TICKS`
+  [10/20/30/60/120 min] via `reach_wu × _px_per_wu`; rings too small to read or
+  past the scope edge at the current burn are skipped, each carries a duration
+  label (time not by colour alone — ADR 0012).
+- Time annotations use `Palette.STATUS_NOMINAL` (green) — distinct from the
+  accent-blue course/selection. New `tr()` keys `NAV_DURATION_HM` / `NAV_DURATION_M`.
+
+Also fixed a latent orrery course-line artifact surfaced while reviewing the
+pips: the line was sampled uniformly in real distance, but the log-radial
+projection bends it most where the straight path passes near the star (small
+radius, fast bearing sweep), so cross-system courses kinked into a zig-zag.
+Replaced the fixed 20-sample loop with adaptive chord-flattening subdivision
+(`_subdivide_course`, ≤512 segs) drawn as one `draw_polyline` — smooth for any
+geometry, cheap on the flat outer legs. A second pass fixed courses plotted
+*through* the star: there the standard projection collapses everything inside
+`r_min` to the hub and the bearing flips, spiking the line through centre.
+Added pure `OrreryProjection.project_path` (floors onto the inner ring at the
+true bearing instead of collapsing) and route the course line + pips through it,
+so a near-star leg arcs smoothly around the hub. +3 projection tests (109 green).
+
+Tuning left for the step-10 feel pass: pip interval, isochrone durations, badge
+placement (flagged in `docs/ALPHA-0.2-SPEC.md` knobs). ADR 0019 confirmed.
+
+---
+
+## 2026-06-06 — Design: travel-time legibility on the nav views (ADR 0019)
+
+Design session (no code). The captain found the orrery counter-intuitive — its
+log compression strips any sense of travel time from the geometry. Reframe: on a
+schematic, magnitude is *labelled*, not read. Decided (ADR 0019), all burn-aware:
+
+- **Orrery:** per-body **ETA badges** (`FlightMath.eta_ticks` → duration) and a
+  **time-pip course line** tagged with its ETA. Time is read off labels, not
+  distance.
+- **Tactical scope:** **isochrone rings** at fixed durations for the selected
+  burn, as clean concentric circles next to the sensor circle — the reach
+  planner. (Isochrones belong on the scope: a ship-centred time-circle warps on
+  the star-centred orrery, like the sensor boundary.)
+- New pure helper `FlightMath.reach_wu(burn, ticks)` (inverse of `eta_ticks`) to
+  place the rings; reuse the Helm burn signal to recompute on burn change.
+- Rejected a time-based orrery projection (unstable — re-flows with ship/burn).
+
+Folded into `docs/navigation.md` (new section + helper contract + tests) and the
+α0.2 build order (now step 7). Not built yet.
+
+---
+
 ## 2026-06-06 — Build: tactical scope (α0.2 step 8)
 
 Added the tactical scope — the radar to the orrery's chart plotter. `TacticalView`

@@ -15,15 +15,27 @@ const CONTACT_PX := 6.0
 const SELECT_GAP_PX := 7.0
 const LABEL_SIZE := 13
 const PICK_PX := 22.0
-const COURSE_SAMPLES := 20
+const COURSE_FLATNESS_PX := 1.0  # max chord deviation before a course segment subdivides
+const COURSE_MAX_DEPTH := 9      # subdivision cap (≤512 segments) — terminates the recursion
 const RING_COLOR := Color(0.35, 0.45, 0.58, 0.30)
+const MOON_RING_COLOR := Color(0.35, 0.45, 0.58, 0.18)  # fainter than planet rings (ADR 0022)
 const SHIP_TINT := Color(0.9, 0.95, 1.0)
+const TIME_COLOR := Palette.STATUS_NOMINAL  # travel-time annotations (ADR 0019); paired with text
+const SATELLITE_COLOR := Palette.TEXT_DIM  # "has moons" halo + pips (ADR 0022)
+const SATELLITE_PIP_CAP := 4              # max moon pips drawn around the halo
+const PIP_TICKS := 30   # one course-line pip per this many in-game minutes (tuning)
+const PIP_PX := 5.0     # half-length of a pip tick, px
 
 var _system: SystemData
 var _params: OrreryParams
 var _star_pos: Vector2 = Vector2.ZERO
 var _by_id: Dictionary = {}        # id -> BodyData
+var _moons_by_parent: Dictionary = {}  # parent id -> Array[BodyData] (ADR 0022)
 var _selected_id: String = ""
+var _selected_point: Vector2 = Vector2.ZERO
+var _has_point_sel: bool = false  # a free-space waypoint is selected (ADR 0020)
+var _burn: int = FlightMath.Burn.STANDARD  # mirrors the Helm burn selector (ADR 0019)
+var _scale_mode: int = OrreryParams.ScaleMode.LOG  # schematic ↔ true scale (ADR 0021)
 var _font: Font
 
 
@@ -34,15 +46,24 @@ func build(system: SystemData) -> void:
 		_by_id[body.id] = body
 		if body.kind == BodyData.Kind.STAR:
 			_star_pos = body.position
+		if body.kind == BodyData.Kind.MOON and body.parent_id != "":
+			if not _moons_by_parent.has(body.parent_id):
+				_moons_by_parent[body.parent_id] = []
+			_moons_by_parent[body.parent_id].append(body)
 	_rebuild_params()
 	EventBus.nav_target_selected.connect(_on_target_selected)
+	EventBus.nav_point_selected.connect(_on_point_selected)
+	EventBus.nav_burn_changed.connect(_on_burn_changed)
+	EventBus.nav_scale_changed.connect(_on_scale_changed)
 	EventBus.contact_detected.connect(_on_contacts_changed.unbind(1))
 	EventBus.contact_lost.connect(_on_contacts_changed.unbind(1))
+	EventBus.contact_promoted.connect(_on_contacts_changed.unbind(2))
 
 
 func _rebuild_params() -> void:
 	var vp := get_viewport_rect().size
 	_params = OrreryParams.new()
+	_params.mode = _scale_mode
 	_params.center = vp * 0.5
 	_params.ring_inner = 64.0
 	_params.ring_outer = minf(vp.x, vp.y) * 0.42
@@ -54,6 +75,22 @@ func _process(_delta: float) -> void:
 
 func _on_target_selected(target_id: String) -> void:
 	_selected_id = target_id
+	_has_point_sel = false
+
+
+func _on_point_selected(point: Vector2) -> void:
+	_selected_point = point
+	_has_point_sel = true
+	_selected_id = ""
+
+
+func _on_burn_changed(burn: int) -> void:
+	_burn = burn  # _process redraws every frame; badges/pips pick this up
+
+
+func _on_scale_changed(mode: int) -> void:
+	_scale_mode = mode
+	_rebuild_params()  # remap radii (log ↔ linear); _process redraws
 
 
 func _on_contacts_changed() -> void:
@@ -81,6 +118,13 @@ func _project_real(real_pos: Vector2) -> Vector2:
 	return OrreryProjection.project(real_pos - _star_pos, _params)
 
 
+## Project a point on the course path: floors onto the inner ring near the star
+## instead of collapsing to the hub, so a course passing through the centre arcs
+## around it smoothly rather than spiking through (ADR 0016 gently-curved line).
+func _project_course_point(real_pos: Vector2) -> Vector2:
+	return OrreryProjection.project_path(real_pos - _star_pos, _params)
+
+
 # --- Draw ---
 
 func _draw() -> void:
@@ -92,12 +136,22 @@ func _draw() -> void:
 	for body: BodyData in _system.bodies:
 		_draw_body(body, proj[body.id])
 	_draw_contacts()
+	if _has_point_sel:
+		_draw_waypoint(_project_course_point(_selected_point))
 	_draw_ship()
 
 
 func _draw_rings(proj: Dictionary) -> void:
 	for body: BodyData in _system.bodies:
-		if body.kind == BodyData.Kind.STAR or body.kind == BodyData.Kind.MOON:
+		if body.kind == BodyData.Kind.STAR:
+			continue
+		if body.kind == BodyData.Kind.MOON:
+			# Moon orbit ring: centred on the parent's projected point (ADR 0022).
+			# In true scale moons collapse onto the parent — skip the vanishing ring.
+			var parent_proj: Vector2 = proj.get(body.parent_id, _params.center)
+			var moon_radius: float = (proj[body.id] - parent_proj).length()
+			if moon_radius >= 2.0:
+				draw_arc(parent_proj, moon_radius, 0.0, TAU, 48, MOON_RING_COLOR, 1.0, true)
 			continue
 		var radius: float = (proj[body.id] - _params.center).length()
 		draw_arc(_params.center, radius, 0.0, TAU, 96, RING_COLOR, 1.0, true)
@@ -116,35 +170,116 @@ func _draw_body(body: BodyData, at: Vector2) -> void:
 			draw_circle(at, MOON_PX, body.tint)
 		_:
 			draw_circle(at, PLANET_PX, body.tint)
-	_draw_label(at + Vector2(_marker_px(body.kind) + 4.0, 4.0), tr(body.name_key), Palette.TEXT)
+	if _moons_by_parent.has(body.id):
+		_draw_satellite_affordance(at, _marker_px(body.kind), _moons_by_parent[body.id].size())
+	var label_at := at + Vector2(_marker_px(body.kind) + 4.0, 4.0)
+	_draw_label(label_at, tr(body.name_key), Palette.TEXT)
+	# Per-body ETA badge at the selected burn (ADR 0019): time labelled, not read
+	# off the log-compressed geometry. The star is the hub, not a destination.
+	if body.kind != BodyData.Kind.STAR:
+		var ticks := FlightMath.eta_ticks(GameState.ship.position.distance_to(body.position), _burn)
+		_draw_label(label_at + Vector2(0.0, LABEL_SIZE + 1.0), _format_duration(ticks), TIME_COLOR)
+
+
+## Mark a planet that has moons (ADR 0022): a thin halo ring + one pip per moon
+## (capped), so it's evident the planet is focusable — shape + count, not colour.
+func _draw_satellite_affordance(at: Vector2, marker_px: float, moon_count: int) -> void:
+	var halo_r := marker_px + 3.0
+	draw_arc(at, halo_r, 0.0, TAU, 32, SATELLITE_COLOR, 1.0, true)
+	var pips: int = mini(moon_count, SATELLITE_PIP_CAP)
+	for i in pips:
+		var a := TAU * float(i) / float(pips) - PI * 0.5
+		draw_circle(at + Vector2.from_angle(a) * (halo_r + 3.0), 1.5, SATELLITE_COLOR)
 
 
 func _draw_contacts() -> void:
 	for contact: ContactData in _system.contacts:
-		if GameState.contacts.tier_of(contact.id) == Sensors.Tier.UNDETECTED:
+		var tier := GameState.contacts.tier_of(contact.id)
+		if tier == Sensors.Tier.UNDETECTED:
 			continue
+		var identified := tier == Sensors.Tier.IDENTIFIED
 		var at := _project_real(contact.position)
-		# Distinct from bodies: a hollow diamond with a centre dot (shape, not colour).
-		_draw_diamond(at, CONTACT_PX, contact.tint, false)
+		if contact.id == _selected_id:
+			draw_arc(at, CONTACT_PX + SELECT_GAP_PX, 0.0, TAU, 32, Palette.ACCENT, 1.5, true)
+		# Shape carries identity (ADR 0012): a hollow diamond is an unscanned BLIP;
+		# scanning fills it and reveals the name.
+		_draw_diamond(at, CONTACT_PX, contact.tint, identified)
 		draw_circle(at, 1.5, contact.tint)
-		_draw_label(at + Vector2(CONTACT_PX + 4.0, 4.0), tr(contact.name_key), Palette.TEXT_DIM)
+		var label := tr(contact.name_key) if identified else tr("NAV_CONTACT_UNKNOWN")
+		_draw_label(at + Vector2(CONTACT_PX + 4.0, 4.0), label, Palette.TEXT_DIM)
+
+
+## A free-space waypoint marker: a small ring + crosshair in the accent colour.
+func _draw_waypoint(at: Vector2) -> void:
+	draw_arc(at, 6.0, 0.0, TAU, 24, Palette.ACCENT, 1.5, true)
+	draw_line(at + Vector2(-9.0, 0.0), at + Vector2(9.0, 0.0), Palette.ACCENT, 1.0, true)
+	draw_line(at + Vector2(0.0, -9.0), at + Vector2(0.0, 9.0), Palette.ACCENT, 1.0, true)
 
 
 func _draw_course() -> void:
 	var order: Dictionary = GameState.ship.current_order
 	if String(order.get("type", "")) != "course":
 		return
+	var dest := _course_dest(order)
+	var ship_pos := GameState.ship.position
+	# The course is a straight real path, but the log-radial projection bends it —
+	# and the bend is sharpest where the path passes near the star (small radius,
+	# fast bearing sweep). Uniform sampling under-resolves that and the chords
+	# kink ("zig-zag"); subdivide adaptively so only the curved part gets points.
+	var pts := PackedVector2Array([_project_course_point(ship_pos)])
+	_subdivide_course(ship_pos, dest, 0.0, 1.0, 0, pts)
+	draw_polyline(pts, Palette.ACCENT, 1.5, true)
 	var target: BodyData = _by_id.get(String(order.get("target_id", "")), null)
-	if target == null:
+	var ring: float = (_marker_px(target.kind) + 5.0) if target != null else 8.0
+	draw_arc(_project_course_point(dest), ring, 0.0, TAU, 24, Palette.ACCENT, 1.0, true)
+	_draw_course_time(ship_pos, dest)
+
+
+## Destination point of the laid-in course: a charted body's position, or the
+## frozen `dest` for a contact / free point (ADR 0020).
+func _course_dest(order: Dictionary) -> Vector2:
+	var body: BodyData = _by_id.get(String(order.get("target_id", "")), null)
+	if body != null:
+		return body.position
+	return order.get("dest", GameState.ship.position)
+
+
+## Flatten the projected course curve: keep the projected midpoint within
+## COURSE_FLATNESS_PX of the chord, else split. Appends end-points in path order.
+func _subdivide_course(s: Vector2, e: Vector2, t0: float, t1: float, depth: int,
+		pts: PackedVector2Array) -> void:
+	var p0 := _project_course_point(s.lerp(e, t0))
+	var p1 := _project_course_point(s.lerp(e, t1))
+	var tm := (t0 + t1) * 0.5
+	var pm := _project_course_point(s.lerp(e, tm))
+	if depth >= COURSE_MAX_DEPTH or pm.distance_to((p0 + p1) * 0.5) <= COURSE_FLATNESS_PX:
+		pts.append(p1)
 		return
-	var prev := _project_real(GameState.ship.position)
-	for i in range(1, COURSE_SAMPLES + 1):
-		var t := float(i) / float(COURSE_SAMPLES)
-		var p := _project_real(GameState.ship.position.lerp(target.position, t))
-		draw_line(prev, p, Palette.ACCENT, 1.5, true)
-		prev = p
-	draw_arc(_project_real(target.position), _marker_px(target.kind) + 5.0, 0.0, TAU, 24,
-		Palette.ACCENT, 1.0, true)
+	_subdivide_course(s, e, t0, tm, depth + 1, pts)
+	_subdivide_course(s, e, tm, t1, depth + 1, pts)
+
+
+## Graduate the course line with a pip per fixed time unit and tag it with the
+## leg ETA, so leg length reads as duration on the log-compressed chart (ADR 0019).
+## Speed is constant per burn, so each pip sits at an even fraction of the real
+## path; the projection then warps the spacing exactly as it warps the line.
+func _draw_course_time(ship_pos: Vector2, target_pos: Vector2) -> void:
+	var total_ticks := FlightMath.eta_ticks(ship_pos.distance_to(target_pos), _burn)
+	if total_ticks <= 0:
+		return
+	var k := 1
+	while k * PIP_TICKS < total_ticks:
+		var f := float(k * PIP_TICKS) / float(total_ticks)
+		var at := _project_course_point(ship_pos.lerp(target_pos, f))
+		var ahead := _project_course_point(ship_pos.lerp(target_pos, minf(1.0, f + 0.01)))
+		var perp := (ahead - at).normalized().orthogonal()
+		if perp.length() < 0.5:
+			perp = Vector2.UP
+		draw_line(at - perp * PIP_PX, at + perp * PIP_PX, TIME_COLOR, 1.5, true)
+		k += 1
+	# ETA tag at the leg midpoint.
+	var mid := _project_course_point(ship_pos.lerp(target_pos, 0.5))
+	_draw_label(mid + Vector2(6.0, -4.0), _format_duration(total_ticks), TIME_COLOR)
 
 
 func _draw_ship() -> void:
@@ -161,11 +296,10 @@ func _draw_ship() -> void:
 func _ship_facing() -> float:
 	var order: Dictionary = GameState.ship.current_order
 	if String(order.get("type", "")) == "course":
-		var target: BodyData = _by_id.get(String(order.get("target_id", "")), null)
-		if target != null:
-			var dir := _project_real(target.position) - _project_real(GameState.ship.position)
-			if dir.length() > 0.5:
-				return dir.angle()
+		var dir := _project_course_point(_course_dest(order)) \
+			- _project_course_point(GameState.ship.position)
+		if dir.length() > 0.5:
+			return dir.angle()
 	return GameState.ship.heading
 
 
@@ -185,6 +319,16 @@ func _draw_label(at: Vector2, text: String, color: Color) -> void:
 	draw_string(_font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, LABEL_SIZE, color)
 
 
+## Compact duration from a tick count (one tick = one in-game minute): "1h 09m"
+## above the hour, "45m" below it. tr() so it stays localizable (ADR 0010).
+func _format_duration(ticks: int) -> String:
+	var h := ticks / 60
+	var m := ticks % 60
+	if h > 0:
+		return tr("NAV_DURATION_HM").format({"hours": h, "mins": "%02d" % m})
+	return tr("NAV_DURATION_M").format({"mins": m})
+
+
 func _marker_px(kind: int) -> float:
 	match kind:
 		BodyData.Kind.STAR:
@@ -201,18 +345,34 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not visible or _system == null:
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var target := _body_at(get_viewport().get_mouse_position())
+		var mouse := get_viewport().get_mouse_position()
+		var target := _pick_at(mouse)
 		if target != "":
-			EventBus.nav_target_selected.emit(target)
+			# Re-clicking an already-selected moon-bearing planet focuses it (ADR 0022).
+			if target == _selected_id and _moons_by_parent.has(target):
+				EventBus.nav_focus_requested.emit(target)
+			else:
+				EventBus.nav_target_selected.emit(target)
+		else:
+			# Empty space → drop a free-space waypoint (inverse log map, ADR 0020).
+			EventBus.nav_point_selected.emit(_star_pos + OrreryProjection.unproject(mouse, _params))
 
 
-func _body_at(screen_pos: Vector2) -> String:
-	var proj := _project_bodies()
+## Nearest charted body or detected contact under the cursor ("" if none close).
+func _pick_at(screen_pos: Vector2) -> String:
 	var nearest_id := ""
 	var nearest_px := PICK_PX
+	var proj := _project_bodies()
 	for id: String in proj:
 		var d := screen_pos.distance_to(proj[id])
 		if d <= nearest_px:
 			nearest_px = d
 			nearest_id = id
+	for contact: ContactData in _system.contacts:
+		if GameState.contacts.tier_of(contact.id) == Sensors.Tier.UNDETECTED:
+			continue
+		var d := screen_pos.distance_to(_project_real(contact.position))
+		if d <= nearest_px:
+			nearest_px = d
+			nearest_id = contact.id
 	return nearest_id

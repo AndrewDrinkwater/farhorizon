@@ -156,6 +156,77 @@ func test_lay_in_rejected_to_current_location() -> void:
 	assert_signal_emitted(EventBus, "order_rejected", "can't plot a course to where we already are")
 
 
+func _contact(id: String) -> ContactData:
+	for c: ContactData in TypeRegistry.get_system("sol").contacts:
+		if c.id == id:
+			return c
+	return null
+
+
+func test_course_to_a_free_point_flies_there_and_drifts() -> void:
+	var dest := Vector2(4000.0, 1500.0)
+	GameState.ship.position = Vector2.ZERO
+	GameState.ship.reaction_mass = 100.0
+	EventBus.order_issued.emit({"type": "set_course", "target_id": "", "point": dest,
+		"burn": FlightMath.Burn.HARD})
+	assert_eq(GameState.ship.current_order.get("dest"), dest, "free-point destination stored")
+	EventBus.order_issued.emit({"type": "engage"})
+	for i in range(2000):
+		if not bool(GameState.ship.current_order.get("engaged", false)):
+			break
+		EventBus.sim_tick.emit(i + 1)
+	assert_almost_eq(GameState.ship.position.distance_to(dest), 0.0, 1.0, "arrived on the point")
+	assert_eq(GameState.ship.current_order, {}, "course consumed on arrival")
+	assert_eq(GameState.ship.location, Travel.Location.DEEP_SPACE, "drifts in deep space (no hold)")
+	assert_eq(_fc.get_state(), FlightCore.State.IDLE, "idle once arrived")
+
+
+func test_course_to_a_detected_contact_flies_to_it() -> void:
+	var kepri := _contact("kepri_derelict")
+	assert_not_null(kepri, "sol has the kepri contact")
+	GameState.contacts.set_tier("kepri_derelict", Sensors.Tier.BLIP)  # detected, so plottable
+	GameState.ship.position = Vector2.ZERO
+	GameState.ship.reaction_mass = 100.0
+	EventBus.order_issued.emit({"type": "set_course", "target_id": "kepri_derelict",
+		"burn": FlightMath.Burn.HARD})
+	EventBus.order_issued.emit({"type": "engage"})
+	for i in range(2000):
+		if not bool(GameState.ship.current_order.get("engaged", false)):
+			break
+		EventBus.sim_tick.emit(i + 1)
+	assert_almost_eq(GameState.ship.position.distance_to(kepri.position), 0.0, 1.0, "reached the contact")
+	assert_eq(GameState.ship.location, Travel.Location.DEEP_SPACE, "drifts beside the contact")
+
+
+func test_course_to_an_undetected_contact_is_rejected() -> void:
+	watch_signals(EventBus)
+	GameState.contacts.set_tier("kepri_derelict", Sensors.Tier.UNDETECTED)
+	EventBus.order_issued.emit({"type": "set_course", "target_id": "kepri_derelict",
+		"burn": FlightMath.Burn.STANDARD})
+	assert_signal_emitted(EventBus, "order_rejected", "can't plot to a contact you haven't detected")
+	assert_eq(GameState.ship.current_order, {}, "no course stored")
+
+
+func test_scan_in_range_identifies_a_contact() -> void:
+	var kepri := _contact("kepri_derelict")
+	GameState.contacts.set_tier("kepri_derelict", Sensors.Tier.BLIP)
+	GameState.ship.position = kepri.position  # right on top of it -> in range
+	watch_signals(EventBus)
+	EventBus.order_issued.emit({"type": "scan", "contact_id": "kepri_derelict"})
+	assert_eq(GameState.contacts.tier_of("kepri_derelict"), Sensors.Tier.IDENTIFIED, "scan identifies")
+	assert_signal_emitted(EventBus, "contact_promoted", "promotion announced")
+
+
+func test_scan_out_of_range_is_rejected() -> void:
+	var kepri := _contact("kepri_derelict")
+	GameState.contacts.set_tier("kepri_derelict", Sensors.Tier.BLIP)
+	GameState.ship.position = kepri.position + Vector2(GameState.ship.sensor_range + 1000.0, 0.0)
+	watch_signals(EventBus)
+	EventBus.order_issued.emit({"type": "scan", "contact_id": "kepri_derelict"})
+	assert_signal_emitted(EventBus, "order_rejected", "too far to scan")
+	assert_eq(GameState.contacts.tier_of("kepri_derelict"), Sensors.Tier.BLIP, "tier unchanged")
+
+
 func test_resync_after_load_resumes_transit() -> void:
 	var rubicon := _find("rubicon")
 	GameState.ship.position = rubicon.position * 0.5

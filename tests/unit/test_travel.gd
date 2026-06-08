@@ -59,3 +59,33 @@ func test_dock_needs_holding_at_a_station() -> void:
 func test_undock_only_when_docked() -> void:
 	assert_true(Travel.available(_ctx({"location": DOCK}))["undock"])
 	assert_false(Travel.available(_ctx({"location": HOLD}))["undock"])
+
+
+func test_lay_in_allowed_for_a_free_point_with_no_id() -> void:
+	# A free-space waypoint has no id but still enables lay-in (ADR 0020).
+	assert_true(Travel.available(_ctx({"has_nav_selection": true}))["lay_in"],
+		"a selected waypoint (no id) can be laid in")
+	assert_false(Travel.available(_ctx({"has_nav_selection": false}))["lay_in"],
+		"nothing selected -> cannot")
+
+
+func test_scan_needs_a_contact_in_range_at_blip_not_under_way() -> void:
+	var ok := _ctx({
+		"nav_target_is_contact": true, "nav_target_in_range": true,
+		"nav_target_tier": Sensors.Tier.BLIP,
+	})
+	assert_true(Travel.available(ok)["scan"], "in-range BLIP contact -> can scan")
+	assert_false(Travel.available(_merge(ok, {"nav_target_in_range": false}))["scan"],
+		"out of range -> cannot scan")
+	assert_false(Travel.available(_merge(ok, {"nav_target_tier": Sensors.Tier.IDENTIFIED}))["scan"],
+		"already identified -> cannot scan")
+	assert_false(Travel.available(_merge(ok, {"in_transit": true}))["scan"],
+		"under way -> cannot scan")
+	assert_false(Travel.available(_ctx({"nav_target_is_contact": false}))["scan"],
+		"not a contact -> no scan")
+
+
+func _merge(base: Dictionary, overrides: Dictionary) -> Dictionary:
+	var d := base.duplicate(true)
+	d.merge(overrides, true)
+	return d
