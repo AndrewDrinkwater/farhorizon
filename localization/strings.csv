@@ -99,6 +99,36 @@ HELM_SCALE_SCHEMATIC,Schematic
 HELM_SCALE_TRUE,True scale
 HELM_PIP,Pip
 HELM_PIP_FORMAT,{mins}m · {wu} wu
+HELM_TARGET_INFO,Target Information
+HELM_TI_NAME,Name
+HELM_TI_TYPE,Type
+HELM_TI_DIST,Distance
+HELM_TI_RM,RM
+HELM_TI_STATUS,Status
+HELM_TI_DIST_FORMAT,{au} AU · {wu} wu
+HELM_TI_BEARING_FORMAT,brg {deg}° · {wu} wu
+HELM_TI_REACH_ROUNDTRIP,round-trip OK
+HELM_TI_REACH_ONEWAY,one-way only
+HELM_TI_REACH_NONE,insufficient RM
+HELM_TI_ORBITS,orbits {parent}
+HELM_TI_DOCK_REFUEL,dock + refuel
+HELM_TI_DOCK,dockable
+HELM_TI_HAS_MOONS,has moons (Focus)
+HELM_TI_TIER_BLIP,Blip (unscanned)
+HELM_TI_TIER_IDENTIFIED,Identified
+HELM_TI_SCAN_READY,scan available
+HELM_TI_OVERVIEW,{bodies} bodies · {seen}/{total} contacts seen
+HELM_TI_NEAREST,nearest blip {wu} wu
+HELM_TYPE_STAR,Star
+HELM_TYPE_PLANET,Planet
+HELM_TYPE_MOON,Moon
+HELM_TYPE_STATION,Station
+HELM_KIND_SHIP,Ship
+HELM_KIND_DERELICT,Derelict
+HELM_KIND_ANOMALY,Anomaly
+HELM_KIND_SIGNAL,Signal
+HELM_KIND_PROBE,Probe
+HELM_KIND_DEBRIS,Debris
 NAV_WAYPOINT,Waypoint
 NAV_CONTACT_UNKNOWN,Unknown contact
 VOICE_SHIP_SCAN_COMPLETE,Scan complete. Contact identified.

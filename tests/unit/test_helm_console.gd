@@ -51,7 +51,15 @@ func test_burn_selection_carries_into_the_order() -> void:
 	assert_eq(order.get("burn"), FlightMath.Burn.HARD, "chosen burn is composed in")
 
 
-func test_acknowledgment_is_logged() -> void:
-	# An ack on the bus should append to the order log without error.
+func test_acknowledgment_shows_a_transient_line() -> void:
+	# An ack on the bus shows in the Flight Status transient line (ADR 0025).
 	EventBus.order_acknowledged.emit(CrewVoice.SHIP_VOICE, "VOICE_SHIP_COURSE_LAID_IN")
-	assert_eq(_helm._order_log._box.get_child_count(), 1, "one log line recorded")
+	assert_ne(_helm._ack_line.text, "", "the ack line shows the ship voice")
+	assert_almost_eq(_helm._ack_line.modulate.a, 1.0, 0.01, "shown at full opacity before fading")
+
+
+func test_target_info_reflects_a_selected_body() -> void:
+	EventBus.nav_target_selected.emit("verdant")
+	assert_eq(_helm._ti_name._value.text, tr("BODY_VERDANT"), "target info names the body")
+	assert_eq(_helm._ti_type._value.text, tr("HELM_TYPE_PLANET"), "and gives its type")
+	assert_ne(_helm._ti_dist._value.text, "—", "distance populated")

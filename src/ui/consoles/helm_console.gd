@@ -36,9 +36,16 @@ var _status_light: TLight
 var _status_distance: TReadout
 var _status_eta: TReadout
 var _fuel_gauge: TGauge
+var _ack_line: Label    # transient ship-voice acknowledgments (ADR 0025)
+var _ack_tween: Tween
 
-# Order Log
-var _order_log: TList
+# Target Information panel (ADR 0025) — burn-aware details for the selection
+var _ti_name: TReadout
+var _ti_type: TReadout
+var _ti_dist: TReadout
+var _ti_eta: TReadout
+var _ti_rm: TReadout
+var _ti_status: TReadout
 
 
 func _ready() -> void:
@@ -54,7 +61,7 @@ func _ready() -> void:
 	_build_course_order()
 	_build_scale_toggle()
 	_build_flight_status()
-	_build_order_log()
+	_build_target_info()
 	_connect_bus()
 	_refresh_all()
 	EventBus.nav_burn_changed.emit(_burn)  # sync the nav views to the starting burn (ADR 0019)
@@ -179,16 +186,33 @@ func _build_flight_status() -> void:
 	c.add_child(_fuel_gauge)
 	_fuel_gauge.bind(_fuel_data)
 
+	# Transient ship-voice line (ADR 0025): an ack/reject shows here then fades.
+	_ack_line = Label.new()
+	_ack_line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_ack_line.add_theme_color_override("font_color", Palette.STATUS_INFO)
+	_ack_line.modulate.a = 0.0
+	c.add_child(_ack_line)
 
-# --- Order Log region ---
 
-func _build_order_log() -> void:
-	var panel := TPanel.new("HELM_ORDER_LOG")
+# --- Target Information region (ADR 0025): replaces the Order Log ---
+
+func _build_target_info() -> void:
+	var panel := TPanel.new("HELM_TARGET_INFO")
 	add_child(panel)
 	_place(panel, 1.0, 1.0, 1.0, 1.0, -380.0, -300.0, -16.0, -16.0)
-	_order_log = TList.new()
-	_order_log.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	panel.content().add_child(_order_log)
+	var c := panel.content()
+	_ti_name = TReadout.new("HELM_TI_NAME")
+	c.add_child(_ti_name)
+	_ti_type = TReadout.new("HELM_TI_TYPE")
+	c.add_child(_ti_type)
+	_ti_dist = TReadout.new("HELM_TI_DIST")
+	c.add_child(_ti_dist)
+	_ti_eta = TReadout.new("HELM_ETA")
+	c.add_child(_ti_eta)
+	_ti_rm = TReadout.new("HELM_TI_RM")
+	c.add_child(_ti_rm)
+	_ti_status = TReadout.new("HELM_TI_STATUS")
+	c.add_child(_ti_status)
 
 
 # --- Bus wiring ---
@@ -262,11 +286,25 @@ func _on_fuel_changed(_pool: int, _value: float) -> void:
 
 
 func _on_order_acknowledged(speaker_key: String, line_key: String) -> void:
-	_log(speaker_key, line_key)
+	_show_ack(speaker_key, line_key)
 
 
 func _on_order_rejected(reason_key: String) -> void:
-	_log(CrewVoice.SHIP_VOICE, reason_key)
+	_show_ack(CrewVoice.SHIP_VOICE, reason_key)
+
+
+## Flash a ship-voice line in Flight Status, then fade it (ADR 0025) — keeps the
+## captain-voice beat (ADR 0014) without a persistent log panel.
+func _show_ack(speaker_key: String, line_key: String) -> void:
+	if _ack_line == null:
+		return
+	_ack_line.text = tr("LOG_LINE_FORMAT").format({"speaker": tr(speaker_key), "line": tr(line_key)})
+	_ack_line.modulate.a = 1.0
+	if _ack_tween != null and _ack_tween.is_valid():
+		_ack_tween.kill()
+	_ack_tween = create_tween()
+	_ack_tween.tween_interval(3.0)
+	_ack_tween.tween_property(_ack_line, "modulate:a", 0.0, 2.0)
 
 
 # --- Compose actions (burn + order buttons) ---
@@ -407,6 +445,7 @@ func _context() -> Dictionary:
 
 
 func _refresh_preview() -> void:
+	_refresh_target_info()  # the Target Info panel updates on the same triggers (ADR 0025)
 	if _sel_kind == Travel.TargetKind.NONE:
 		_target_readout.set_value(tr("HELM_NO_TARGET"))
 		_distance_readout.set_value("—")
@@ -508,10 +547,150 @@ func _location_name() -> String:
 	return tr(body.name_key) if body != null else ""
 
 
-func _log(speaker_key: String, line_key: String) -> void:
-	_order_log.add_record(tr("LOG_LINE_FORMAT").format({
-		"speaker": tr(speaker_key), "line": tr(line_key),
+# --- Target Information (ADR 0025) ---
+
+## Populate the Target Info panel for the current selection, burn-aware.
+func _refresh_target_info() -> void:
+	if _ti_name == null:
+		return
+	match _sel_kind:
+		Travel.TargetKind.BODY:
+			_ti_body()
+		Travel.TargetKind.CONTACT:
+			_ti_contact()
+		Travel.TargetKind.POINT:
+			_ti_point()
+		_:
+			_ti_none()
+
+
+func _ti_body() -> void:
+	var body := _resolve_body(_sel_id)
+	if body == null:
+		_ti_none()
+		return
+	_ti_name.set_value(tr(body.name_key))
+	_ti_type.set_value(_body_kind_label(body.kind))
+	_set_dist_eta_rm(body.position)
+	var bits: Array[String] = []
+	if body.parent_id != "":
+		var parent := _resolve_body(body.parent_id)
+		if parent != null:
+			bits.append(tr("HELM_TI_ORBITS").format({"parent": tr(parent.name_key)}))
+	if body.can_dock and body.can_refuel:
+		bits.append(tr("HELM_TI_DOCK_REFUEL"))
+	elif body.can_dock:
+		bits.append(tr("HELM_TI_DOCK"))
+	if _selection_has_moons():
+		bits.append(tr("HELM_TI_HAS_MOONS"))
+	_ti_status.set_value(" · ".join(bits) if not bits.is_empty() else "—")
+
+
+func _ti_contact() -> void:
+	var contact := _resolve_contact(_sel_id)
+	if contact == null:
+		_ti_none()
+		return
+	var identified := GameState.contacts.tier_of(_sel_id) == Sensors.Tier.IDENTIFIED
+	_ti_name.set_value(tr(contact.name_key) if identified else tr("NAV_CONTACT_UNKNOWN"))
+	_ti_type.set_value(_contact_kind_label(contact.kind) if identified else tr("NAV_CONTACT_UNKNOWN"))
+	_set_dist_eta_rm(contact.position)
+	var bits: Array[String] = [tr("HELM_TI_TIER_IDENTIFIED") if identified else tr("HELM_TI_TIER_BLIP")]
+	if not identified and GameState.ship.position.distance_to(contact.position) <= GameState.ship.sensor_range:
+		bits.append(tr("HELM_TI_SCAN_READY"))
+	_ti_status.set_value(" · ".join(bits))
+
+
+func _ti_point() -> void:
+	_ti_name.set_value(tr("NAV_WAYPOINT"))
+	_ti_type.set_value(tr("NAV_WAYPOINT"))
+	var rel := _sel_point - GameState.ship.position
+	var deg := int(roundf(rad_to_deg(rel.angle())))
+	deg = ((deg % 360) + 360) % 360
+	_ti_dist.set_value(tr("HELM_TI_BEARING_FORMAT").format({"deg": deg, "wu": "%.0f" % rel.length()}))
+	var cost := FlightMath.rm_cost(rel.length(), _burn)
+	_ti_eta.set_value(_format_eta(FlightMath.eta_ticks(rel.length(), _burn)))
+	_ti_rm.set_value("%s — %s" % [_format_rm(cost), _reach_label(cost)])
+	_ti_status.set_value("—")
+
+
+func _ti_none() -> void:
+	_ti_name.set_value(tr("HELM_NO_TARGET"))
+	_ti_type.set_value("—")
+	_ti_dist.set_value("—")
+	_ti_eta.set_value("—")
+	_ti_rm.set_value("—")
+	_ti_status.set_value(_overview_text())
+
+
+## Distance (AU + wu), ETA, and RM-cost-with-reachability for a destination point.
+func _set_dist_eta_rm(pos: Vector2) -> void:
+	var d := GameState.ship.position.distance_to(pos)
+	_ti_dist.set_value(tr("HELM_TI_DIST_FORMAT").format({
+		"au": "%.2f" % (d / Travel.WU_PER_AU), "wu": "%.0f" % d,
 	}))
+	_ti_eta.set_value(_format_eta(FlightMath.eta_ticks(d, _burn)))
+	var cost := FlightMath.rm_cost(d, _burn)
+	_ti_rm.set_value("%s — %s" % [_format_rm(cost), _reach_label(cost)])
+
+
+## Can the current tank reach there and back / one-way / not at all (ADR 0025)?
+func _reach_label(cost: float) -> String:
+	var rm := GameState.ship.reaction_mass
+	if cost * 2.0 <= rm:
+		return tr("HELM_TI_REACH_ROUNDTRIP")
+	if cost <= rm:
+		return tr("HELM_TI_REACH_ONEWAY")
+	return tr("HELM_TI_REACH_NONE")
+
+
+## "Nothing selected" overview: body count, contacts seen, nearest unscanned blip.
+func _overview_text() -> String:
+	var system := TypeRegistry.get_system(GameState.system.system_id)
+	if system == null:
+		return "—"
+	var seen := 0
+	var nearest_blip := INF
+	for contact: ContactData in system.contacts:
+		var tier := GameState.contacts.tier_of(contact.id)
+		if tier != Sensors.Tier.UNDETECTED:
+			seen += 1
+		if tier == Sensors.Tier.BLIP:
+			nearest_blip = minf(nearest_blip, GameState.ship.position.distance_to(contact.position))
+	var text := tr("HELM_TI_OVERVIEW").format({
+		"bodies": system.bodies.size(), "seen": seen, "total": system.contacts.size(),
+	})
+	if nearest_blip < INF:
+		text += " · " + tr("HELM_TI_NEAREST").format({"wu": "%.0f" % nearest_blip})
+	return text
+
+
+func _body_kind_label(kind: int) -> String:
+	match kind:
+		BodyData.Kind.STAR:
+			return tr("HELM_TYPE_STAR")
+		BodyData.Kind.STATION:
+			return tr("HELM_TYPE_STATION")
+		BodyData.Kind.MOON:
+			return tr("HELM_TYPE_MOON")
+		_:
+			return tr("HELM_TYPE_PLANET")
+
+
+func _contact_kind_label(kind: int) -> String:
+	match kind:
+		ContactData.Kind.SHIP:
+			return tr("HELM_KIND_SHIP")
+		ContactData.Kind.DERELICT:
+			return tr("HELM_KIND_DERELICT")
+		ContactData.Kind.ANOMALY:
+			return tr("HELM_KIND_ANOMALY")
+		ContactData.Kind.PROBE:
+			return tr("HELM_KIND_PROBE")
+		ContactData.Kind.DEBRIS:
+			return tr("HELM_KIND_DEBRIS")
+		_:
+			return tr("HELM_KIND_SIGNAL")
 
 
 func _format_distance(wu: float) -> String:
