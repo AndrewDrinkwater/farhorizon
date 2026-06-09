@@ -113,9 +113,16 @@ localization/  strings.csv
   **pan & zoom** (wheel + right/middle-drag), near-star course pulled inward, lay-in
   label declutter, between-pip legend, scale control as a toggle switch above the
   Course Order box. **129 tests green; boots clean.**
-- **Next:** more α0.3 feel tuning if needed in-engine (glyphs, scan range cue,
-  inset size, zoom limits); then scope the next slice (station-keeping hold, survey
-  rung, or a second console) — write the spec before building.
+- **Nav iteration 2 — built** (ADR 0024/0025 + Calder content). Runtime system
+  loading (`GameState.load_system`, `SystemLoader`, `system_change_requested` /
+  `system_changed`; views/sensors/flight/Helm re-init on change — seed of warp); a
+  dev **debug console** (backtick → `DebugConsole` + `DebugActions`: `system <id>`,
+  `refuel`, `tp …`); **Calder Reach**, a dense 2nd system (`system calder`); and the
+  Helm **Target Information panel** (ADR 0025, replaced the Order Log; acks now a
+  transient Flight Status line). **144 tests green; boots clean.**
+- **Next:** in-engine feel pass vs Calder (orrery density, moon insets, isochrones,
+  sensor sweep) + the standing α0.3 tuning; then scope the next slice (station-
+  keeping hold, survey rung, or a second console) — write the spec before building.
 
 ## Workflow expectations
 - Keep `DEVLOG.md` updated; add an ADR for any architectural fork.

@@ -4,6 +4,35 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-09 — Build: nav iteration 2 (system loading, debug console, Calder, target panel)
+
+Built the whole nav-iter-2 batch (ADR 0024 + 0025 + Calder content), in order,
+tests green at each step. **144 GUT tests green; boots clean.**
+
+1. **Runtime system loading (ADR 0024):** `GameState.load_system(system)` resets
+   the run (id, ship→ship_start, clear course, DEEP_SPACE, reset contact
+   discovery; fuel kept). New `EventBus.system_change_requested` / `system_changed`;
+   a `SystemLoader` node validates the id and announces. Nav views / sensors /
+   flight / Helm re-init on `system_changed` (views gained a build-once-connect +
+   `_init_system` rebuild path). The seed of warp later. GUT: state reset + loader.
+2. **Debug console (ADR 0024):** `toggle_console` (backtick); `DebugActions`
+   command runner (`help`, `systems`, `system <id>`, `refuel`, `tp <body>|<x y>`)
+   that mutates GameState + emits existing signals (sanctioned debug exception;
+   release-gate TODO noted); `DebugConsole` overlay (toggles via `_input` so the
+   backtick never lands in the field). GUT: every command.
+3. **Calder Reach (content):** 2nd system .tres — 1 star + 8 planets + 6 moons +
+   2 stations + 7 contacts; positions `round(AU*1000*(cosθ,sinθ))`; Bastion has 3
+   moons; contacts spread across/beyond the start sensor range. Reach via
+   `system calder`. GUT: density + moon-parent integrity + sol→calder switch.
+4. **Target Information panel (ADR 0025):** the Order Log became a burn-aware
+   Target Info panel (name, type, distance AU+wu/bearing, ETA, RM + reachability,
+   status: parent/dock/refuel/moons/contact-tier/scan; overview when nothing
+   selected). Ship-voice acks moved to a transient, fading line in Flight Status.
+5. **Feel pass:** in-engine tuning vs Calder is by F5 (orrery density, moon
+   clustering, isochrones, sensor sweep). ADRs 0024 + 0025 confirmed.
+
+---
+
 ## 2026-06-08 — Design: nav iteration 2 (tooling, 2nd system, target panel)
 
 Design session (no code). Three nav-polish asks from the captain, turned into a
