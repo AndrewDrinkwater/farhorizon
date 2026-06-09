@@ -28,6 +28,7 @@ const SATELLITE_COLOR := Palette.TEXT_DIM  # "has moons" halo + pips (ADR 0022)
 const COURSE_NOGO_COLOR := Palette.STATUS_ALERT    # course crosses a no-go (ADR 0028)
 const COURSE_HAZARD_COLOR := Palette.STATUS_CAUTION  # course crosses a hazard
 const WAYPOINT_HANDLE_PX := 5.0  # grabbable waypoint handle radius
+const GRAB_PX := 12.0  # cursor distance for grabbing a course leg / waypoint handle
 const SATELLITE_PIP_CAP := 4              # max moon pips drawn around the halo
 const PIP_TICKS := 30   # one course-line pip per this many in-game minutes (tuning)
 const PIP_PX := 5.0     # half-length of a pip tick, px
@@ -41,6 +42,8 @@ var _selected_id: String = ""
 var _selected_point: Vector2 = Vector2.ZERO
 var _has_point_sel: bool = false  # a free-space waypoint is selected (ADR 0020)
 var _preview_route: PackedVector2Array = PackedVector2Array()  # compose-time route (ADR 0027)
+var _drag_wp: int = -1  # waypoint being dragged (ADR 0028), -1 = none
+var _drag_wps: PackedVector2Array = PackedVector2Array()  # working waypoint list during a drag
 var _burn: int = FlightMath.Burn.STANDARD  # mirrors the Helm burn selector (ADR 0019)
 var _scale_mode: int = OrreryParams.ScaleMode.LOG  # schematic ↔ true scale (ADR 0021)
 var _zoom: float = 1.0          # wheel zoom about the cursor (ADR 0023)
@@ -529,23 +532,86 @@ func _unhandled_input(event: InputEvent) -> void:
 			_panning = event.pressed
 			_pan_last = get_viewport().get_mouse_position()
 			return
-		if event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-			var mouse := get_viewport().get_mouse_position()
-			var target := _pick_at(mouse)
-			if target != "":
-				# Re-clicking an already-selected moon-bearing planet focuses it (ADR 0022).
-				if target == _selected_id and _moons_by_parent.has(target):
-					EventBus.nav_focus_requested.emit(target)
-				else:
-					EventBus.nav_target_selected.emit(target)
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed:
+				_on_left_press(get_viewport().get_mouse_position())
 			else:
-				# Empty space → drop a free-space waypoint (inverse projection, ADR 0020/0023).
-				EventBus.nav_point_selected.emit(_star_pos + OrreryProjection.unproject(_unview(mouse), _params))
-	elif event is InputEventMouseMotion and _panning:
+				_drag_wp = -1  # release ends any waypoint drag
+	elif event is InputEventMouseMotion:
 		var mouse := get_viewport().get_mouse_position()
-		_pan += mouse - _pan_last
-		_pan_last = mouse
-		queue_redraw()
+		if _drag_wp >= 0:
+			if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+				_drag_wp = -1  # release happened off the map — end the drag
+				return
+			_drag_wps[_drag_wp] = _screen_to_real(mouse)  # drag the course around obstacles (ADR 0028)
+			EventBus.nav_waypoints_set.emit(_drag_wps)
+			queue_redraw()
+		elif _panning:
+			_pan += mouse - _pan_last
+			_pan_last = mouse
+			queue_redraw()
+
+
+func _on_left_press(mouse: Vector2) -> void:
+	var target := _pick_at(mouse)
+	if target != "":
+		# Re-clicking an already-selected moon-bearing planet focuses it (ADR 0022).
+		if target == _selected_id and _moons_by_parent.has(target):
+			EventBus.nav_focus_requested.emit(target)
+		else:
+			EventBus.nav_target_selected.emit(target)
+		return
+	# Grab the plotted course to add / move a waypoint (ADR 0028), while idle.
+	if not _under_way() and _preview_route.size() >= 2:
+		var handle := _waypoint_handle_at(mouse)
+		if handle >= 0:
+			_drag_wp = handle
+			_drag_wps = _plot_waypoints()
+			return
+		var leg := _course_leg_at(mouse)
+		if leg >= 0:
+			_drag_wps = _plot_waypoints()
+			_drag_wps.insert(leg, _screen_to_real(mouse))  # new waypoint on this leg
+			_drag_wp = leg
+			EventBus.nav_waypoints_set.emit(_drag_wps)
+			return
+	# Empty space → plot a direct course to that free point (ADR 0020/0028).
+	EventBus.nav_point_selected.emit(_screen_to_real(mouse))
+
+
+## Screen → real (wu): inverse projection + inverse zoom/pan (ADR 0023).
+func _screen_to_real(screen_pos: Vector2) -> Vector2:
+	return _star_pos + OrreryProjection.unproject(_unview(screen_pos), _params)
+
+
+## The plotted route's waypoints (the route minus its ship + destination ends).
+func _plot_waypoints() -> PackedVector2Array:
+	var wps := PackedVector2Array()
+	for i in range(1, _preview_route.size() - 1):
+		wps.append(_preview_route[i])
+	return wps
+
+
+## Waypoint-list index whose handle is under the cursor, or -1.
+func _waypoint_handle_at(mouse: Vector2) -> int:
+	for i in range(1, _preview_route.size() - 1):
+		if mouse.distance_to(_project_course_point(_preview_route[i])) <= GRAB_PX:
+			return i - 1
+	return -1
+
+
+## Route-leg index nearest the cursor (within GRAB_PX) in screen space, or -1.
+func _course_leg_at(mouse: Vector2) -> int:
+	var best := GRAB_PX
+	var best_leg := -1
+	for i in range(_preview_route.size() - 1):
+		var a := _project_course_point(_preview_route[i])
+		var b := _project_course_point(_preview_route[i + 1])
+		var d := mouse.distance_to(Geometry2D.get_closest_point_to_segment(mouse, a, b))
+		if d <= best:
+			best = d
+			best_leg = i
+	return best_leg
 
 
 ## Zoom by `factor` about the cursor, keeping the chart point under it fixed (ADR 0023).

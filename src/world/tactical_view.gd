@@ -21,6 +21,7 @@ const SHIP_TINT := Color(0.9, 0.95, 1.0)
 const COURSE_NOGO_COLOR := Palette.STATUS_ALERT     # course crosses a no-go (ADR 0028)
 const COURSE_HAZARD_COLOR := Palette.STATUS_CAUTION  # course crosses a hazard
 const WAYPOINT_HANDLE_PX := 5.0  # grabbable waypoint handle radius
+const GRAB_PX := 12.0  # cursor distance for grabbing a course leg / waypoint handle
 const TIME_COLOR := Palette.STATUS_NOMINAL  # isochrone rings (ADR 0019); paired with a label
 const ISOCHRONE_RING_COLOR := Color(Palette.STATUS_NOMINAL, 0.30)
 ## Durations (in-game minutes) drawn as isochrone rings for the selected burn.
@@ -33,6 +34,8 @@ var _selected_id: String = ""
 var _selected_point: Vector2 = Vector2.ZERO
 var _has_point_sel: bool = false  # a free-space waypoint is selected (ADR 0020)
 var _preview_route: PackedVector2Array = PackedVector2Array()  # compose-time route (ADR 0027)
+var _drag_wp: int = -1  # waypoint being dragged (ADR 0028), -1 = none
+var _drag_wps: PackedVector2Array = PackedVector2Array()
 var _center: Vector2
 var _px_per_wu: float = 0.1
 var _burn: int = FlightMath.Burn.STANDARD  # mirrors the Helm burn selector (ADR 0019)
@@ -331,24 +334,86 @@ func _find(id: String) -> BodyData:
 func _unhandled_input(event: InputEvent) -> void:
 	if not visible or _system == null:
 		return
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var mouse := get_viewport().get_mouse_position()
-		var nearest_id := ""
-		var nearest_px := PICK_PX
-		for body: BodyData in _system.bodies:
-			var d := mouse.distance_to(_to_screen(body.position))
-			if d <= nearest_px:
-				nearest_px = d
-				nearest_id = body.id
-		for contact: ContactData in _system.contacts:
-			if GameState.contacts.tier_of(contact.id) == Sensors.Tier.UNDETECTED:
-				continue
-			var d := mouse.distance_to(_to_screen(contact.position))
-			if d <= nearest_px:
-				nearest_px = d
-				nearest_id = contact.id
-		if nearest_id != "":
-			EventBus.nav_target_selected.emit(nearest_id)
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_on_left_press(get_viewport().get_mouse_position())
 		else:
-			# Empty space → drop a free-space waypoint (true-scale inverse, ADR 0020).
-			EventBus.nav_point_selected.emit(GameState.ship.position + (mouse - _center) / _px_per_wu)
+			_drag_wp = -1  # release ends any waypoint drag
+	elif event is InputEventMouseMotion and _drag_wp >= 0:
+		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			_drag_wp = -1  # release happened off the map — end the drag
+			return
+		_drag_wps[_drag_wp] = _screen_to_real(get_viewport().get_mouse_position())
+		EventBus.nav_waypoints_set.emit(_drag_wps)
+		queue_redraw()
+
+
+func _on_left_press(mouse: Vector2) -> void:
+	var target := _pick_at(mouse)
+	if target != "":
+		EventBus.nav_target_selected.emit(target)
+		return
+	# Grab the plotted course to add / move a waypoint (ADR 0028), while idle.
+	if not _under_way() and _preview_route.size() >= 2:
+		var handle := _waypoint_handle_at(mouse)
+		if handle >= 0:
+			_drag_wp = handle
+			_drag_wps = _plot_waypoints()
+			return
+		var leg := _course_leg_at(mouse)
+		if leg >= 0:
+			_drag_wps = _plot_waypoints()
+			_drag_wps.insert(leg, _screen_to_real(mouse))
+			_drag_wp = leg
+			EventBus.nav_waypoints_set.emit(_drag_wps)
+			return
+	EventBus.nav_point_selected.emit(_screen_to_real(mouse))  # free-point destination
+
+
+func _pick_at(mouse: Vector2) -> String:
+	var nearest_id := ""
+	var nearest_px := PICK_PX
+	for body: BodyData in _system.bodies:
+		var d := mouse.distance_to(_to_screen(body.position))
+		if d <= nearest_px:
+			nearest_px = d
+			nearest_id = body.id
+	for contact: ContactData in _system.contacts:
+		if GameState.contacts.tier_of(contact.id) == Sensors.Tier.UNDETECTED:
+			continue
+		var d := mouse.distance_to(_to_screen(contact.position))
+		if d <= nearest_px:
+			nearest_px = d
+			nearest_id = contact.id
+	return nearest_id
+
+
+func _screen_to_real(mouse: Vector2) -> Vector2:
+	return GameState.ship.position + (mouse - _center) / _px_per_wu
+
+
+func _plot_waypoints() -> PackedVector2Array:
+	var wps := PackedVector2Array()
+	for i in range(1, _preview_route.size() - 1):
+		wps.append(_preview_route[i])
+	return wps
+
+
+func _waypoint_handle_at(mouse: Vector2) -> int:
+	for i in range(1, _preview_route.size() - 1):
+		if mouse.distance_to(_to_screen(_preview_route[i])) <= GRAB_PX:
+			return i - 1
+	return -1
+
+
+func _course_leg_at(mouse: Vector2) -> int:
+	var best := GRAB_PX
+	var best_leg := -1
+	for i in range(_preview_route.size() - 1):
+		var a := _to_screen(_preview_route[i])
+		var b := _to_screen(_preview_route[i + 1])
+		var d := mouse.distance_to(Geometry2D.get_closest_point_to_segment(mouse, a, b))
+		if d <= best:
+			best = d
+			best_leg = i
+	return best_leg
