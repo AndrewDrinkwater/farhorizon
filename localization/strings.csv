@@ -40,6 +40,11 @@ CONTACT_ECHOVEX,Echo Vex (signal)
 CONTACT_HOLLOW,Hollow (signal)
 CONTACT_PALE,Pale (anomaly)
 CONTACT_CINDERFIELD,Cinderfield (debris)
+ZONE_CALDER_CORONA,Calder Corona
+ZONE_BASTION_BELT,Bastion Radiation Belt
+ZONE_VEIL_CLOUD,Veil Cloud
+ZONE_MERIDIAN_NET,Meridian Sensor Net
+ZONE_DRIFT_SIGNAL,Drift Signal
 HELM_CONSOLE_NAME,Helm
 HELM_LAY_IN_COURSE,Lay In Course
 HELM_ENGAGE,Engage

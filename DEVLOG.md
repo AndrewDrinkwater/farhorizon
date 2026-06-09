@@ -4,6 +4,30 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-09 — Design: Zones + course obstacle routing (ADR 0026/0027)
+
+Design session (no code). New primitive: **Zones** — authored spatial regions for
+hazards, fields, no-go space, station/comms coverage, refuel bands, and
+on-arrival triggers. Kept general so one primitive serves all of them.
+
+- **ZoneData (ADR 0026):** geometry (circle / band / polygon, body-anchorable) +
+  a **generic effect-tag bag** (consuming systems read recognised keys; new
+  effects need no new type). Membership decided in real space on `sim_tick` via
+  pure `Zones.contains`, with a `ZoneController` mirroring `SensorController`;
+  `zone_entered`/`zone_exited`. **Only the on-enter trigger hook is wired this
+  slice** (`zone_trigger_fired` for the future event system); `sensor_mult`,
+  `rm_drain`, `refuel` etc. are authored-but-inert until their systems land.
+- **Course obstacle routing (ADR 0027):** zones tagged `blocks_course` —
+  **no-go** rejects a crossing leg, **hazard** warns. The captain plots around by
+  dropping **waypoints** (multi-leg `current_order.waypoints`); each leg validated
+  via pure `Zones.segment_intersects`. Auto-pathfinding deferred.
+- `docs/zones.md` has the data shape, core contracts + tests, example zones for
+  Calder Reach (one of each shape/category), and a 6-step build order.
+
+Not built yet — ready to hand to Claude Code.
+
+---
+
 ## 2026-06-09 — Build: nav iteration 2 (system loading, debug console, Calder, target panel)
 
 Built the whole nav-iter-2 batch (ADR 0024 + 0025 + Calder content), in order,

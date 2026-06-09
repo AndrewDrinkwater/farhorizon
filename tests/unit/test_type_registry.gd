@@ -87,6 +87,32 @@ func test_calder_moons_reference_real_parents() -> void:
 			assert_ne(body.kind, ids[body.parent_id].kind, "a moon's parent isn't itself a moon")
 
 
+func test_calder_zones_load_one_of_each_shape_and_category() -> void:
+	var system := TypeRegistry.get_system("calder")
+	assert_eq(system.zones.size(), 5, "five authored zones")
+	var shapes: Dictionary = {}
+	var categories: Dictionary = {}
+	for zone: ZoneData in system.zones:
+		shapes[zone.shape] = true
+		categories[zone.category] = true
+		assert_ne(zone.name_key, "", "zone '%s' has a name key" % zone.id)
+	assert_true(shapes.has(ZoneData.Shape.CIRCLE), "a circle zone")
+	assert_true(shapes.has(ZoneData.Shape.BAND), "a band zone")
+	assert_true(shapes.has(ZoneData.Shape.POLYGON), "a polygon zone")
+	assert_eq(categories.size(), 5, "all five categories represented")
+
+
+func test_calder_zone_effects_authored() -> void:
+	var system := TypeRegistry.get_system("calder")
+	var by_id: Dictionary = {}
+	for zone: ZoneData in system.zones:
+		by_id[zone.id] = zone
+	assert_eq(String(by_id["calder_corona"].effects.get("blocks_course", "")), "nogo", "corona is no-go")
+	assert_eq(String(by_id["bastion_belt"].effects.get("blocks_course", "")), "hazard", "belt is a hazard")
+	assert_eq(by_id["calder_corona"].anchor_body_id, "calder", "corona anchored to the star")
+	assert_true(bool(by_id["drift_signal"].effects.get("once", false)), "drift trigger is one-shot")
+
+
 func test_unknown_system_is_null() -> void:
 	assert_null(TypeRegistry.get_system("does_not_exist"), "missing id -> null")
 	assert_false(TypeRegistry.has_system("does_not_exist"), "has_system false for missing")

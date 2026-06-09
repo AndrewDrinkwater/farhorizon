@@ -8,6 +8,7 @@ extends Resource
 @export var name_key: String = ""
 @export var bodies: Array[BodyData] = []  # charted (gravimetric) bodies
 @export var contacts: Array[ContactData] = []  # transient entities (ADR 0017)
+@export var zones: Array[ZoneData] = []  # authored spatial regions (ADR 0026)
 @export var ship_start: Vector2 = Vector2.ZERO  # world units
 
 

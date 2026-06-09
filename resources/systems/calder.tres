@@ -3,6 +3,7 @@
 [ext_resource type="Script" path="res://src/data/body_data.gd" id="1_body"]
 [ext_resource type="Script" path="res://src/data/contact_data.gd" id="2_contact"]
 [ext_resource type="Script" path="res://src/data/system_data.gd" id="3_system"]
+[ext_resource type="Script" path="res://src/data/zone_data.gd" id="4_zone"]
 
 [sub_resource type="Resource" id="B_calder"]
 script = ExtResource("1_body")
@@ -207,10 +208,78 @@ name_key = "CONTACT_CINDERFIELD"
 kind = 5
 position = Vector2(-17320, 10000)
 
+[sub_resource type="Resource" id="Z_corona"]
+script = ExtResource("4_zone")
+id = "calder_corona"
+name_key = "ZONE_CALDER_CORONA"
+category = 2
+shape = 0
+anchor_body_id = "calder"
+radius = 300.0
+effects = {
+"blocks_course": "nogo"
+}
+tint = Color(0.9, 0.5, 0.3, 1)
+
+[sub_resource type="Resource" id="Z_belt"]
+script = ExtResource("4_zone")
+id = "bastion_belt"
+name_key = "ZONE_BASTION_BELT"
+category = 0
+shape = 1
+anchor_body_id = "bastion"
+radius = 600.0
+inner_radius = 300.0
+effects = {
+"blocks_course": "hazard",
+"sensor_mult": 0.6
+}
+tint = Color(0.85, 0.7, 0.35, 1)
+
+[sub_resource type="Resource" id="Z_veil"]
+script = ExtResource("4_zone")
+id = "veil_cloud"
+name_key = "ZONE_VEIL_CLOUD"
+category = 1
+shape = 2
+points = PackedVector2Array(-700, 7000, 900, 7200, 1700, 8200, 1100, 9300, -300, 9400, -1100, 8300)
+effects = {
+"sensor_mult": 0.5
+}
+tint = Color(0.6, 0.55, 0.75, 1)
+
+[sub_resource type="Resource" id="Z_net"]
+script = ExtResource("4_zone")
+id = "meridian_net"
+name_key = "ZONE_MERIDIAN_NET"
+category = 3
+shape = 0
+anchor_body_id = "meridian"
+radius = 600.0
+effects = {
+"sensor_mult": 1.5
+}
+tint = Color(0.55, 0.78, 0.85, 1)
+
+[sub_resource type="Resource" id="Z_drift"]
+script = ExtResource("4_zone")
+id = "drift_signal"
+name_key = "ZONE_DRIFT_SIGNAL"
+category = 4
+shape = 0
+center = Vector2(-14100, 11900)
+radius = 400.0
+effects = {
+"trigger_event": "ev_drift_signal",
+"once": true
+}
+tint = Color(0.6, 0.85, 0.6, 1)
+
 [resource]
 script = ExtResource("3_system")
 id = "calder"
 name_key = "SYSTEM_CALDER"
 bodies = Array[ExtResource("1_body")]([SubResource("B_calder"), SubResource("B_ember"), SubResource("B_halcyon"), SubResource("B_toll"), SubResource("B_cradle"), SubResource("B_meridian"), SubResource("B_bastion"), SubResource("B_hearth"), SubResource("B_pallid"), SubResource("B_vex"), SubResource("B_sable"), SubResource("B_wane"), SubResource("B_drift"), SubResource("B_calyx"), SubResource("B_mote"), SubResource("B_greaves"), SubResource("B_thule")])
 contacts = Array[ExtResource("2_contact")]([SubResource("C_solane"), SubResource("C_drift9"), SubResource("C_hauler"), SubResource("C_echovex"), SubResource("C_hollow"), SubResource("C_pale"), SubResource("C_cinderfield")])
+zones = Array[ExtResource("4_zone")]([SubResource("Z_corona"), SubResource("Z_belt"), SubResource("Z_veil"), SubResource("Z_net"), SubResource("Z_drift")])
 ship_start = Vector2(1000, 0)
