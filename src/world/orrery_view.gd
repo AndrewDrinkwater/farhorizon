@@ -15,6 +15,9 @@ const CONTACT_PX := 6.0
 const SELECT_GAP_PX := 7.0
 const LABEL_SIZE := 13
 const PICK_PX := 22.0
+const ZOOM_MIN := 0.4
+const ZOOM_MAX := 12.0
+const ZOOM_STEP := 1.15   # per wheel notch
 const COURSE_FLATNESS_PX := 1.0  # max chord deviation before a course segment subdivides
 const COURSE_MAX_DEPTH := 9      # subdivision cap (≤512 segments) — terminates the recursion
 const RING_COLOR := Color(0.35, 0.45, 0.58, 0.30)
@@ -36,6 +39,10 @@ var _selected_point: Vector2 = Vector2.ZERO
 var _has_point_sel: bool = false  # a free-space waypoint is selected (ADR 0020)
 var _burn: int = FlightMath.Burn.STANDARD  # mirrors the Helm burn selector (ADR 0019)
 var _scale_mode: int = OrreryParams.ScaleMode.LOG  # schematic ↔ true scale (ADR 0021)
+var _zoom: float = 1.0          # wheel zoom about the cursor (ADR 0023)
+var _pan: Vector2 = Vector2.ZERO  # drag pan
+var _panning: bool = false
+var _pan_last: Vector2 = Vector2.ZERO
 var _font: Font
 
 
@@ -90,6 +97,8 @@ func _on_burn_changed(burn: int) -> void:
 
 func _on_scale_changed(mode: int) -> void:
 	_scale_mode = mode
+	_zoom = 1.0  # reframe cleanly for the new mode (ADR 0023)
+	_pan = Vector2.ZERO
 	_rebuild_params()  # remap radii (log ↔ linear); _process redraws
 
 
@@ -100,29 +109,47 @@ func _on_contacts_changed() -> void:
 # --- Projection ---
 
 ## id -> projected screen position for every charted body (moons via the parent).
+## Projection is computed unviewed, then the zoom/pan view transform is applied to
+## every point together (ADR 0023) so moon clusters scale with the chart.
 func _project_bodies() -> Dictionary:
-	var proj: Dictionary = {}
+	var raw: Dictionary = {}
 	for body: BodyData in _system.bodies:
 		if body.kind != BodyData.Kind.MOON:
-			proj[body.id] = OrreryProjection.project(body.position - _star_pos, _params)
+			raw[body.id] = OrreryProjection.project(body.position - _star_pos, _params)
 	for body: BodyData in _system.bodies:
 		if body.kind == BodyData.Kind.MOON:
 			var parent: BodyData = _by_id.get(body.parent_id, null)
-			var parent_proj: Vector2 = proj.get(body.parent_id, _params.center)
+			var parent_raw: Vector2 = raw.get(body.parent_id, _params.center)
 			var parent_pos: Vector2 = parent.position if parent != null else _star_pos
-			proj[body.id] = OrreryProjection.project_child(body.position - parent_pos, parent_proj, _params)
+			raw[body.id] = OrreryProjection.project_child(body.position - parent_pos, parent_raw, _params)
+	var proj: Dictionary = {}
+	for id: String in raw:
+		proj[id] = _view(raw[id])
 	return proj
 
 
 func _project_real(real_pos: Vector2) -> Vector2:
-	return OrreryProjection.project(real_pos - _star_pos, _params)
+	return _view(OrreryProjection.project(real_pos - _star_pos, _params))
 
 
-## Project a point on the course path: floors onto the inner ring near the star
-## instead of collapsing to the hub, so a course passing through the centre arcs
-## around it smoothly rather than spiking through (ADR 0016 gently-curved line).
+## Project a point on the course path: in LOG mode it is pulled inward near the
+## star (ramp toward the hub) so the course curves in rather than ballooning around
+## the inner ring (ADR 0016/0023). View transform applied like everything else.
 func _project_course_point(real_pos: Vector2) -> Vector2:
-	return OrreryProjection.project_path(real_pos - _star_pos, _params)
+	return _view(OrreryProjection.project_path(real_pos - _star_pos, _params))
+
+
+# --- View transform: zoom + pan on top of the projection (ADR 0023) ---
+
+## Projected (chart) point → screen point, zoomed about the hub then panned. Only
+## positions transform; marker/label sizes stay constant (text never balloons).
+func _view(p: Vector2) -> Vector2:
+	return _params.center + (p - _params.center) * _zoom + _pan
+
+
+## Inverse of _view: screen point → projected (chart) point, for input/picking.
+func _unview(s: Vector2) -> Vector2:
+	return _params.center + (s - _params.center - _pan) / _zoom
 
 
 # --- Draw ---
@@ -142,19 +169,20 @@ func _draw() -> void:
 
 
 func _draw_rings(proj: Dictionary) -> void:
+	var hub := _view(_params.center)  # the star, under the zoom/pan transform (ADR 0023)
 	for body: BodyData in _system.bodies:
 		if body.kind == BodyData.Kind.STAR:
 			continue
 		if body.kind == BodyData.Kind.MOON:
 			# Moon orbit ring: centred on the parent's projected point (ADR 0022).
 			# In true scale moons collapse onto the parent — skip the vanishing ring.
-			var parent_proj: Vector2 = proj.get(body.parent_id, _params.center)
+			var parent_proj: Vector2 = proj.get(body.parent_id, hub)
 			var moon_radius: float = (proj[body.id] - parent_proj).length()
 			if moon_radius >= 2.0:
 				draw_arc(parent_proj, moon_radius, 0.0, TAU, 48, MOON_RING_COLOR, 1.0, true)
 			continue
-		var radius: float = (proj[body.id] - _params.center).length()
-		draw_arc(_params.center, radius, 0.0, TAU, 96, RING_COLOR, 1.0, true)
+		var radius: float = (proj[body.id] - hub).length()
+		draw_arc(hub, radius, 0.0, TAU, 96, RING_COLOR, 1.0, true)
 
 
 func _draw_body(body: BodyData, at: Vector2) -> void:
@@ -174,9 +202,10 @@ func _draw_body(body: BodyData, at: Vector2) -> void:
 		_draw_satellite_affordance(at, _marker_px(body.kind), _moons_by_parent[body.id].size())
 	var label_at := at + Vector2(_marker_px(body.kind) + 4.0, 4.0)
 	_draw_label(label_at, tr(body.name_key), Palette.TEXT)
-	# Per-body ETA badge at the selected burn (ADR 0019): time labelled, not read
-	# off the log-compressed geometry. The star is the hub, not a destination.
-	if body.kind != BodyData.Kind.STAR:
+	# Per-body ETA badge at the selected burn (ADR 0019): the whole-system time
+	# glance. Shown only in the overview — suppressed while composing/flying a
+	# course so the plan doesn't clutter (ADR 0019 amended). Star is the hub.
+	if body.kind != BodyData.Kind.STAR and not _composing():
 		var ticks := FlightMath.eta_ticks(GameState.ship.position.distance_to(body.position), _burn)
 		_draw_label(label_at + Vector2(0.0, LABEL_SIZE + 1.0), _format_duration(ticks), TIME_COLOR)
 
@@ -235,6 +264,13 @@ func _draw_course() -> void:
 	_draw_course_time(ship_pos, dest)
 
 
+## True while the captain is composing or flying a course (a target/point selected,
+## or a course laid in) — the map declutters to names + the course leg then.
+func _composing() -> bool:
+	return _selected_id != "" or _has_point_sel \
+		or String(GameState.ship.current_order.get("type", "")) == "course"
+
+
 ## Destination point of the laid-in course: a charted body's position, or the
 ## frozen `dest` for a contact / free point (ADR 0020).
 func _course_dest(order: Dictionary) -> Vector2:
@@ -277,9 +313,8 @@ func _draw_course_time(ship_pos: Vector2, target_pos: Vector2) -> void:
 			perp = Vector2.UP
 		draw_line(at - perp * PIP_PX, at + perp * PIP_PX, TIME_COLOR, 1.5, true)
 		k += 1
-	# ETA tag at the leg midpoint.
-	var mid := _project_course_point(ship_pos.lerp(target_pos, 0.5))
-	_draw_label(mid + Vector2(6.0, -4.0), _format_duration(total_ticks), TIME_COLOR)
+	# (No mid-line ETA label — redundant with the Helm panel + the pip legend, and
+	# it collided with body names; ADR 0019 amended.)
 
 
 func _draw_ship() -> void:
@@ -344,18 +379,46 @@ func _marker_px(kind: int) -> float:
 func _unhandled_input(event: InputEvent) -> void:
 	if not visible or _system == null:
 		return
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var mouse := get_viewport().get_mouse_position()
-		var target := _pick_at(mouse)
-		if target != "":
-			# Re-clicking an already-selected moon-bearing planet focuses it (ADR 0022).
-			if target == _selected_id and _moons_by_parent.has(target):
-				EventBus.nav_focus_requested.emit(target)
+	if event is InputEventMouseButton:
+		if event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_zoom_at(get_viewport().get_mouse_position(), ZOOM_STEP)
+			return
+		if event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_zoom_at(get_viewport().get_mouse_position(), 1.0 / ZOOM_STEP)
+			return
+		# Right- or middle-drag pans (left stays selection/waypoint/focus) — ADR 0023.
+		if event.button_index == MOUSE_BUTTON_RIGHT or event.button_index == MOUSE_BUTTON_MIDDLE:
+			_panning = event.pressed
+			_pan_last = get_viewport().get_mouse_position()
+			return
+		if event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			var mouse := get_viewport().get_mouse_position()
+			var target := _pick_at(mouse)
+			if target != "":
+				# Re-clicking an already-selected moon-bearing planet focuses it (ADR 0022).
+				if target == _selected_id and _moons_by_parent.has(target):
+					EventBus.nav_focus_requested.emit(target)
+				else:
+					EventBus.nav_target_selected.emit(target)
 			else:
-				EventBus.nav_target_selected.emit(target)
-		else:
-			# Empty space → drop a free-space waypoint (inverse log map, ADR 0020).
-			EventBus.nav_point_selected.emit(_star_pos + OrreryProjection.unproject(mouse, _params))
+				# Empty space → drop a free-space waypoint (inverse projection, ADR 0020/0023).
+				EventBus.nav_point_selected.emit(_star_pos + OrreryProjection.unproject(_unview(mouse), _params))
+	elif event is InputEventMouseMotion and _panning:
+		var mouse := get_viewport().get_mouse_position()
+		_pan += mouse - _pan_last
+		_pan_last = mouse
+		queue_redraw()
+
+
+## Zoom by `factor` about the cursor, keeping the chart point under it fixed (ADR 0023).
+func _zoom_at(cursor: Vector2, factor: float) -> void:
+	var old_zoom := _zoom
+	_zoom = clampf(_zoom * factor, ZOOM_MIN, ZOOM_MAX)
+	if is_equal_approx(_zoom, old_zoom):
+		return
+	var chart_pt := _params.center + (cursor - _params.center - _pan) / old_zoom
+	_pan = cursor - _params.center - (chart_pt - _params.center) * _zoom
+	queue_redraw()
 
 
 ## Nearest charted body or detected contact under the cursor ("" if none close).

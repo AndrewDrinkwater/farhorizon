@@ -72,6 +72,8 @@ HELM_FOCUS,Focus
 HELM_SCALE_LABEL,Scale
 HELM_SCALE_SCHEMATIC,Schematic
 HELM_SCALE_TRUE,True scale
+HELM_PIP,Pip
+HELM_PIP_FORMAT,{mins}m · {wu} wu
 NAV_WAYPOINT,Waypoint
 NAV_CONTACT_UNKNOWN,Unknown contact
 VOICE_SHIP_SCAN_COMPLETE,Scan complete. Contact identified.

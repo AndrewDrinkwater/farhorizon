@@ -27,7 +27,8 @@ var _distance_readout: TReadout
 var _eta_readout: TReadout
 var _rm_readout: TReadout
 var _burn_buttons: Dictionary = {}  # burn:int -> TButton
-var _scale_buttons: Dictionary = {}  # OrreryParams.ScaleMode -> TButton
+var _scale_switch: CheckButton  # orrery scale toggle, above the Course Order box (ADR 0021/0023)
+var _pip_readout: TReadout      # between-pip distance/time legend (ADR 0019)
 var _action_buttons: Dictionary = {}  # order id:String -> TButton
 
 # Flight Status widgets
@@ -51,6 +52,7 @@ func _ready() -> void:
 	offset_bottom = 0.0
 	mouse_filter = Control.MOUSE_FILTER_IGNORE  # let map clicks through; panels still catch theirs
 	_build_course_order()
+	_build_scale_toggle()
 	_build_flight_status()
 	_build_order_log()
 	_connect_bus()
@@ -103,30 +105,16 @@ func _build_course_order() -> void:
 		burn_row.add_child(button)
 		_burn_buttons[burn] = button
 
-	var scale_row := HBoxContainer.new()
-	scale_row.add_theme_constant_override("separation", 4)
-	c.add_child(scale_row)
-	var scale_caption := Label.new()
-	scale_caption.text = tr("HELM_SCALE_LABEL")
-	scale_caption.add_theme_color_override("font_color", Palette.TEXT_DIM)
-	scale_caption.custom_minimum_size = Vector2(110.0, 0.0)
-	scale_row.add_child(scale_caption)
-	for entry: Array in [
-		[OrreryParams.ScaleMode.LOG, "HELM_SCALE_SCHEMATIC"],
-		[OrreryParams.ScaleMode.LINEAR, "HELM_SCALE_TRUE"],
-	]:
-		var mode: int = entry[0]
-		var button := TButton.new()
-		button.setup(entry[1], _select_scale.bind(mode))
-		scale_row.add_child(button)
-		_scale_buttons[mode] = button
-
 	_distance_readout = TReadout.new("HELM_DISTANCE")
 	c.add_child(_distance_readout)
 	_eta_readout = TReadout.new("HELM_ETA")
 	c.add_child(_eta_readout)
 	_rm_readout = TReadout.new("HELM_RM_COST")
 	c.add_child(_rm_readout)
+	# Between-pip legend (ADR 0019 feel pass): what one course-line pip spans at the
+	# selected burn — distance per fixed time, so the pips read as a scale.
+	_pip_readout = TReadout.new("HELM_PIP")
+	c.add_child(_pip_readout)
 
 	var row1 := HBoxContainer.new()
 	row1.add_theme_constant_override("separation", 4)
@@ -145,7 +133,26 @@ func _build_course_order() -> void:
 	row2.add_child(_make_action("focus", "HELM_FOCUS", _focus))
 
 	_refresh_burn_buttons()
-	_refresh_scale_buttons()
+
+
+## A toggle switch above the Course Order box that flips the orrery scale mode
+## (ADR 0021/0023) — a CheckButton (slide switch) showing the current mode.
+func _build_scale_toggle() -> void:
+	var box := PanelContainer.new()
+	add_child(box)
+	_place(box, 0.0, 1.0, 0.0, 1.0, 16.0, -342.0, 380.0, -306.0)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	box.add_child(row)
+	var caption := Label.new()
+	caption.text = tr("HELM_SCALE_LABEL")
+	caption.add_theme_color_override("font_color", Palette.TEXT_DIM)
+	row.add_child(caption)
+	_scale_switch = CheckButton.new()
+	_scale_switch.set_pressed_no_signal(_scale == OrreryParams.ScaleMode.LINEAR)
+	_scale_switch.text = _scale_mode_label()
+	_scale_switch.toggled.connect(_on_scale_toggled)
+	row.add_child(_scale_switch)
 
 
 func _make_action(id: String, label_key: String, on_press: Callable) -> TButton:
@@ -259,13 +266,24 @@ func _select_burn(burn: int) -> void:
 	_burn = burn
 	_refresh_burn_buttons()
 	_refresh_preview()
+	_refresh_pip_legend()
 	EventBus.nav_burn_changed.emit(_burn)  # nav views recompute time annotations (ADR 0019)
 
 
 func _select_scale(mode: int) -> void:
 	_scale = mode
-	_refresh_scale_buttons()
+	if _scale_switch != null:
+		_scale_switch.set_pressed_no_signal(_scale == OrreryParams.ScaleMode.LINEAR)
+		_scale_switch.text = _scale_mode_label()
 	EventBus.nav_scale_changed.emit(_scale)  # orrery remaps radii (ADR 0021)
+
+
+func _on_scale_toggled(pressed: bool) -> void:
+	_select_scale(OrreryParams.ScaleMode.LINEAR if pressed else OrreryParams.ScaleMode.LOG)
+
+
+func _scale_mode_label() -> String:
+	return tr("HELM_SCALE_TRUE") if _scale == OrreryParams.ScaleMode.LINEAR else tr("HELM_SCALE_SCHEMATIC")
 
 
 func _lay_in_course() -> void:
@@ -315,6 +333,7 @@ func _refresh_all() -> void:
 	_refresh_preview()
 	_refresh_status()
 	_refresh_actions()
+	_refresh_pip_legend()
 	_fuel_gauge.refresh()
 
 
@@ -323,9 +342,15 @@ func _refresh_burn_buttons() -> void:
 		_burn_buttons[burn].modulate = Palette.ACCENT if burn == _burn else Color.WHITE
 
 
-func _refresh_scale_buttons() -> void:
-	for mode: int in _scale_buttons:
-		_scale_buttons[mode].modulate = Palette.ACCENT if mode == _scale else Color.WHITE
+## Between-pip legend: one course-line pip spans PIP_TICKS minutes; show the
+## distance that covers at the selected burn (ADR 0019 feel pass).
+func _refresh_pip_legend() -> void:
+	if _pip_readout == null:
+		return
+	var wu := FlightMath.reach_wu(_burn, OrreryView.PIP_TICKS)
+	_pip_readout.set_value(tr("HELM_PIP_FORMAT").format({
+		"mins": OrreryView.PIP_TICKS, "wu": "%.0f" % wu,
+	}))
 
 
 ## Enable only the orders that are legal right now (ADR 0015).

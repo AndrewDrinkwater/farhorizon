@@ -49,19 +49,24 @@ static func unproject(chart_pos: Vector2, p: OrreryParams) -> Vector2:
 	return offset.normalized() * r
 
 
-## Like `project`, but in LOG mode the inner clamp floors onto `ring_inner` at the
-## true bearing instead of collapsing to the hub — so a course passing near/through
-## the star arcs smoothly around the inner ring rather than spiking through it
-## (ADR 0016 gently-curved line). In LINEAR mode there is no log singularity, so it
-## is exactly `project` (a near-star course is a straight line through the centre).
+## Like `project`, but in LOG mode the inner region (r < r_min) **ramps inward**
+## from `ring_inner` down to the hub, at the true bearing — so a course passing
+## near/through the star is pulled in toward the centre (a real fly-by passes close
+## to it) rather than ballooning out around the inner ring or spiking through the
+## hub (ADR 0016 gently-curved line; amended ADR 0023 feel pass). In LINEAR mode
+## there is no log singularity, so it is exactly `project`.
 static func project_path(offset_from_star: Vector2, p: OrreryParams) -> Vector2:
 	if p.mode == OrreryParams.ScaleMode.LINEAR:
 		return project(offset_from_star, p)
 	var r := offset_from_star.length()
 	if r < 0.001:
 		return p.center  # exactly at the hub; no bearing to preserve (no log(0))
-	var t := (log(r) - log(p.r_min)) / (log(p.r_max) - log(p.r_min))
-	var radius := lerpf(p.ring_inner, p.ring_outer, clampf(t, 0.0, 1.0))
+	var radius: float
+	if r >= p.r_min:
+		var t := (log(r) - log(p.r_min)) / (log(p.r_max) - log(p.r_min))
+		radius = lerpf(p.ring_inner, p.ring_outer, clampf(t, 0.0, 1.0))
+	else:
+		radius = p.ring_inner * (r / p.r_min)  # ramp ring_inner → 0 toward the hub
 	return p.center + offset_from_star.normalized() * radius
 
 

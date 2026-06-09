@@ -16,7 +16,7 @@ a mission clock. Being rebuilt deliberately from scratch; α0.1 = "The Ship Flie
 - `docs/consoles/helm.md` — the first console (flight + navigation).
 - `docs/navigation.md` — the orrery + sensor navigation model with the pure
   `core` function contracts and test outlines (planned for α0.2).
-- `docs/adr/0001..0022` — one decision per file. **If you change a decision,
+- `docs/adr/0001..0023` — one decision per file. **If you change a decision,
   add/supersede an ADR.**
 - `DEVLOG.md` — append a short entry per work session (newest on top).
 
@@ -109,10 +109,13 @@ localization/  strings.csv
   unknown-vs-named rendering), the **orrery scale toggle** (`OrreryParams.mode`
   LOG/LINEAR, Helm `Schematic | True scale` control), **moon orbit rings**, and the
   **focus inset** (`MoonInsetView` PiP, "has-moons" affordance, Helm Focus button +
-  re-click, `nav_focus_requested`/`closed`). **129 tests green.**
-- **Next:** α0.3 feel pass (waypoint/contact glyphs, scan range cue, scale
-  readability, satellite halo, inset size); then scope the next slice (station-
-  keeping hold, survey rung, or a second console) — write the spec before building.
+  re-click, `nav_focus_requested`/`closed`); plus a **feel pass** (ADR 0023): orrery
+  **pan & zoom** (wheel + right/middle-drag), near-star course pulled inward, lay-in
+  label declutter, between-pip legend, scale control as a toggle switch above the
+  Course Order box. **129 tests green; boots clean.**
+- **Next:** more α0.3 feel tuning if needed in-engine (glyphs, scan range cue,
+  inset size, zoom limits); then scope the next slice (station-keeping hold, survey
+  rung, or a second console) — write the spec before building.
 
 ## Workflow expectations
 - Keep `DEVLOG.md` updated; add an ADR for any architectural fork.

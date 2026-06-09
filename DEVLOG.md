@@ -4,6 +4,32 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-08 — α0.3 nav feel pass (in-engine feedback)
+
+First in-engine drive surfaced five issues; addressed four + added pan/zoom.
+
+- **Near-star course balloon (fixed):** `project_path` was flooring inner points
+  onto `ring_inner`, so a course past the star bulged into a big arc. Now the
+  inner region (r < r_min) **ramps from ring_inner toward the hub** — the curve is
+  pulled inward (a real fly-by passes close to the star), continuous at r_min.
+  Test updated.
+- **True-scale crowding → pan & zoom (ADR 0023):** `OrreryView` gains mouse-wheel
+  zoom (about the cursor) + right/middle-drag pan, as a view transform applied in
+  the projection wrappers — positions move, marker/label sizes stay constant.
+  Resets on a scale-mode flip. Empty-space picking unprojects through the inverse.
+- **Lay-in label clutter (fixed):** per-body ETA badges now show only in the
+  overview and are suppressed while composing/flying a course; the redundant
+  mid-line leg-ETA label was dropped (ADR 0019 amended).
+- **Between-pip legend (added):** a Helm `Pip` readout shows what one course-line
+  pip spans at the selected burn (`PIP_TICKS` min · `reach_wu` wu).
+- **Scale control → toggle switch:** moved out of the Course Order panel into a
+  `CheckButton` slide switch in a `PanelContainer` **above** the box (ADR 0021/0023).
+
+Still open from the feedback: deeper declutter if needed once zoomed. **129 GUT
+tests green**; app boots clean headless. ADR 0023 added; 0019 amended.
+
+---
+
 ## 2026-06-08 — α0.3: orrery scale toggle + moon rings + focus inset
 
 Three nav-view slices (ADR 0021 + 0022), built B→A→C.

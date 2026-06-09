@@ -55,6 +55,12 @@ changes ETA and reach — turning burn intensity into a felt decision.
 - All time text via `tr()` + the duration format; rings/badges carry a
   label, not colour alone (ADR 0012).
 
+**Amended 2026-06-08 (feel pass):** per-body ETA badges show in the *overview*
+(nothing selected, no course), but are suppressed while composing/flying a course
+to declutter the plan — the destination's time then reads from the Helm panel and
+a single **between-pip legend** (pip interval → distance/time at the current
+burn). The mid-line leg-ETA label was dropped (redundant with the Helm ETA).
+
 ## Alternatives rejected
 - **Time-based orrery projection** (compress by ETA instead of distance) — the
   layout would re-flow whenever the ship moves or the burn changes, an unstable

@@ -64,13 +64,16 @@ func test_real_anchors_land_ordered_between_rings() -> void:
 	assert_lte(tethys, _p.ring_outer)
 
 
-func test_project_path_floors_inner_radius_instead_of_collapsing() -> void:
-	# Inside r_min, the course projection floors onto the inner ring (so a course
-	# near the star arcs around the hub) rather than collapsing to the centre.
+func test_project_path_ramps_inward_below_r_min() -> void:
+	# Inside r_min the course projection ramps from ring_inner toward the hub (pulled
+	# inward, ADR 0023) — at 0.3·r_min it sits at 0.3·ring_inner, bearing preserved.
 	var near := Vector2.from_angle(0.7) * (_p.r_min * 0.3)
 	var projected := OrreryProjection.project_path(near, _p)
-	assert_almost_eq(projected.distance_to(_p.center), _p.ring_inner, 0.01, "floored to inner ring")
+	assert_almost_eq(projected.distance_to(_p.center), _p.ring_inner * 0.3, 0.01, "ramped inward")
 	assert_almost_eq((projected - _p.center).angle(), near.angle(), 0.0001, "bearing preserved")
+	# Continuous at r_min: exactly r_min still lands on the inner ring.
+	assert_almost_eq(OrreryProjection.project_path(Vector2(_p.r_min, 0.0), _p).distance_to(_p.center),
+		_p.ring_inner, 0.01, "continuous with the log map at r_min")
 
 
 func test_unproject_round_trips_project() -> void:
