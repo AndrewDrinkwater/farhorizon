@@ -194,17 +194,9 @@ func _is_moving() -> bool:
 	return String(GameState.ship.current_order.get("type", "")) == "surface_move"
 
 
-## Ship surface position: its parked spot, or smoothly along an in-progress move
-## (sub-tick fraction → no per-tick jumps, ADR 0030).
+## Ship surface position — the live field, advanced per-frame during a move by the
+## FlightController (smooth, like the holding orbit; ADR 0030).
 func _ship_surface_pos() -> Vector2:
-	var order: Dictionary = GameState.ship.current_order
-	if String(order.get("type", "")) == "surface_move":
-		var from: Vector2 = order.get("from", GameState.ship.surface_position)
-		var to: Vector2 = order.get("to", GameState.ship.surface_position)
-		var total: float = maxf(1.0, float(order.get("ticks_total", 1)))
-		var done := total - float(order.get("ticks_left", 0))
-		var t := clampf((done + SimClock.get_tick_fraction()) / total, 0.0, 1.0)
-		return from.lerp(to, t)
 	return GameState.ship.surface_position
 
 

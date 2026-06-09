@@ -292,17 +292,14 @@ func _move(order: Dictionary) -> void:
 		EventBus.order_rejected.emit("ORDER_REJECT_TARGET_UNKNOWN")
 		return
 	var dest_site := String(order.get("site_id", ""))
-	var from: Vector2 = GameState.ship.surface_position
 	var to: Vector2 = _surface_pos(body, dest_site) if dest_site != "" \
-		else order.get("pos", from)
-	if from.distance_to(to) < 1.0:
+		else order.get("pos", GameState.ship.surface_position)
+	if GameState.ship.surface_position.distance_to(to) < 1.0:
 		EventBus.order_rejected.emit("ORDER_REJECT_ALREADY_HERE")
 		return
-	var ticks := SurfaceMath.surface_ticks(from, to, GameState.ship.surface_speed_su_per_tick)
-	GameState.ship.current_order = {
-		"type": "surface_move", "site_id": dest_site, "from": from, "to": to,
-		"ticks_total": maxi(1, ticks), "ticks_left": maxi(1, ticks),
-	}
+	# Advanced per-frame (like the holding orbit) for smooth motion — completes on
+	# arrival, no per-tick countdown (ADR 0030).
+	GameState.ship.current_order = {"type": "surface_move", "site_id": dest_site, "to": to}
 	_set_state(FlightCore.State.SURFACE_MOVING)
 	_acknowledge("VOICE_SHIP_SURFACE_MOVING")
 	_notify_context()
@@ -332,13 +329,25 @@ func _tick_transition(order: Dictionary) -> void:
 			GameState.ship.current_order = {}
 			_set_state(FlightCore.State.IDLE)
 			_acknowledge("VOICE_SHIP_AIRBORNE")
-		"surface_move":
-			GameState.ship.surface_site_id = String(order.get("site_id", ""))
-			GameState.ship.surface_position = order.get("to", GameState.ship.surface_position)
-			GameState.ship.current_order = {}
-			_set_state(FlightCore.State.IDLE)
-			_acknowledge("VOICE_SHIP_ARRIVED_SITE")
 	_notify_context()
+
+
+## Advance a surface move per-frame toward its destination (smooth, like the orbit).
+## Completes on arrival. `seconds` is speed-scaled real time (0 = paused).
+func _advance_surface_move(seconds: float) -> void:
+	if seconds <= 0.0:
+		return
+	var order: Dictionary = GameState.ship.current_order
+	var to: Vector2 = order.get("to", GameState.ship.surface_position)
+	var step := GameState.ship.surface_speed_su_per_tick * (seconds / SimClock.SECONDS_PER_TICK)
+	GameState.ship.surface_position = GameState.ship.surface_position.move_toward(to, step)
+	if GameState.ship.surface_position.distance_to(to) < 0.5:
+		GameState.ship.surface_position = to
+		GameState.ship.surface_site_id = String(order.get("site_id", ""))
+		GameState.ship.current_order = {}
+		_set_state(FlightCore.State.IDLE)
+		_acknowledge("VOICE_SHIP_ARRIVED_SITE")
+		_notify_context()
 
 
 ## A timed surface transition is in progress (busy beat — no new orders).
@@ -362,18 +371,23 @@ func _surface_pos(body: BodyData, site_id: String) -> Vector2:
 ## Smooth holding orbit, advanced per-frame (not on ticks) so it stays visible at
 ## the coarse tick rate; sim-speed scaled, so it freezes when paused.
 func _process(delta: float) -> void:
+	var seconds := delta * SimClock.get_speed()
+	# A surface move glides per-frame toward its destination (smooth, ADR 0030).
+	if String(GameState.ship.current_order.get("type", "")) == "surface_move":
+		_advance_surface_move(seconds)
+		return
 	# Orbit only while genuinely holding — paused during a descent (still HOLDING).
 	if GameState.ship.location != Travel.Location.HOLDING or _in_transition():
 		return
-	var seconds := delta * SimClock.get_speed()
 	if seconds > 0.0:
 		_advance_holding_orbit(seconds)
 
 
 func _on_sim_tick(_tick: int) -> void:
 	var order: Dictionary = GameState.ship.current_order
-	# Surface transitions (land/take-off/move) are timed countdowns (ADR 0029/0030).
-	if _in_transition():
+	# Descent/ascent are timed countdowns; a surface move glides per-frame instead.
+	var ttype := String(order.get("type", ""))
+	if ttype == "land" or ttype == "take_off":
 		_tick_transition(order)
 		return
 	# Holding orbit is handled per-frame in _process, not on ticks.

@@ -107,6 +107,21 @@ func test_route_changed_carries_the_laid_in_flag() -> void:
 	assert_false(params[1], "a fresh plot broadcasts laid_in = false")
 
 
+func test_land_open_landing_opens_the_map_then_descends() -> void:
+	GameState.ship.location = Travel.Location.HOLDING
+	GameState.ship.location_body_id = "verdant"  # landable
+	_helm._refresh_actions()  # builds the picker, default target = Open Landing
+	watch_signals(EventBus)
+	_helm._land()  # first press: open the surface map to pick, no descent
+	assert_signal_emitted(EventBus, "surface_map_requested", "Land opens the surface map to pick a spot")
+	assert_signal_not_emitted(EventBus, "order_issued", "no descent until a spot is chosen")
+	EventBus.surface_point_selected.emit(Vector2(30.0, 40.0))  # pick a touchdown point
+	_helm._land()  # second press: descend there
+	var order: Dictionary = get_signal_parameters(EventBus, "order_issued", 0)[0]
+	assert_eq(order.get("type"), "land")
+	assert_eq(order.get("pos"), Vector2(30.0, 40.0), "descends to the picked point")
+
+
 func test_arrival_clears_the_plot() -> void:
 	EventBus.nav_target_selected.emit("verdant")
 	assert_ne(_helm._sel_kind, Travel.TargetKind.NONE, "a course is plotted")

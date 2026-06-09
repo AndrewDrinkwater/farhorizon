@@ -506,8 +506,19 @@ func _undock() -> void:
 	EventBus.order_issued.emit({"type": "undock"})
 
 
+## Land. A named site descends to its fixed spot at once. Open Landing first opens
+## the surface map so the captain picks a touchdown point, then descends on the
+## next press (ADR 0030) — so you always choose where you set down.
 func _land() -> void:
-	EventBus.order_issued.emit({"type": "land", "site_id": _surface_target_id, "pos": _surface_target_pos})
+	if _surface_target_id != "":
+		EventBus.order_issued.emit({"type": "land", "site_id": _surface_target_id, "pos": _surface_target_pos})
+		return
+	if not _picking_landing:
+		_picking_landing = true
+		_sync_surface_map()  # opens the surface map to pick a spot
+		_show_ack(CrewVoice.SHIP_VOICE, "VOICE_PICK_TOUCHDOWN")
+		return
+	EventBus.order_issued.emit({"type": "land", "site_id": "", "pos": _surface_target_pos})
 
 
 func _take_off() -> void:

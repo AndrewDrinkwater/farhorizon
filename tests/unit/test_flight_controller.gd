@@ -315,11 +315,15 @@ func test_surface_move_changes_site() -> void:
 		EventBus.sim_tick.emit(i + 1)
 	EventBus.order_issued.emit({"type": "move", "site_id": "verdant_outpost"})
 	assert_eq(_fc.get_state(), FlightCore.State.SURFACE_MOVING, "surface move begins")
-	for i in range(200):
-		if GameState.ship.surface_site_id == "verdant_outpost":
-			break
-		EventBus.sim_tick.emit(i + 200)
+	var outpost_pos: Vector2 = GameState.ship.current_order.get("to")
+	# Per-frame glide: a small advance moves partway, not all the way (smooth).
+	_fc._advance_surface_move(0.02 * GameState.ship.surface_speed_su_per_tick)
+	assert_gt(GameState.ship.surface_position.length(), 0.0, "moved off the start")
+	assert_ne(GameState.ship.surface_site_id, "verdant_outpost", "not arrived after one frame")
+	# Plenty of time → arrives.
+	_fc._advance_surface_move(1000.0)
 	assert_eq(GameState.ship.surface_site_id, "verdant_outpost", "arrived at the site")
+	assert_eq(GameState.ship.surface_position, outpost_pos, "ship rests at the site position")
 	assert_eq(GameState.ship.location, Travel.Location.LANDED, "still landed after the move")
 
 

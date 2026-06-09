@@ -71,6 +71,7 @@ VOICE_SHIP_ASCENDING,Lifting off.
 VOICE_SHIP_AIRBORNE,Airborne. Orbit established.
 VOICE_SHIP_SURFACE_MOVING,Moving out.
 VOICE_SHIP_ARRIVED_SITE,Arrived on site.
+VOICE_PICK_TOUCHDOWN,Select a touchdown point, then Land.
 ORDER_REJECT_NOT_LANDABLE,Unable — not a landable body.
 ORDER_REJECT_NOT_LANDED,Unable — not landed.
 HELM_SITE_LABEL,Site

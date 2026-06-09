@@ -4,6 +4,23 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-09 — Surface fixes: real glide + Land-picks-a-spot
+
+- **Glide (real fix):** the per-tick interpolation via `get_tick_fraction` was the
+  only render-interp in the codebase and still read choppy. Switched the surface
+  Move to a **per-frame advance** in `FlightController._process` (the proven
+  holding-orbit pattern): `surface_position.move_toward(to, speed × frame-time)`,
+  completing on arrival; `SurfaceView` just draws the live `surface_position`. No
+  ticks_left countdown for moves.
+- **Land now picks a spot:** Land was descending straight to the default Open
+  Landing. Now Land at **Open Landing** first opens the surface map (a touchdown
+  hint shows); you click a point and press Land again to descend. A **named site**
+  still lands at its fixed spot in one press.
+
+194 GUT tests green; boots clean.
+
+---
+
 ## 2026-06-09 — Surface feel pass: rectangular map, pick landing spot, smooth move
 
 In-engine feedback on the surface view (ADR 0030). **194 GUT tests green; boots clean.**
