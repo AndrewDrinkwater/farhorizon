@@ -69,6 +69,14 @@ func test_dragged_waypoints_compose_into_the_route_order() -> void:
 	assert_eq(order.get("waypoints").size(), 2, "dragged waypoints composed into the route")
 
 
+func test_plotted_distance_includes_dragged_waypoints() -> void:
+	GameState.ship.position = Vector2.ZERO
+	EventBus.nav_target_selected.emit("verdant")  # verdant at (1000,0): direct ~1000 wu
+	assert_almost_eq(_helm._plotted_distance(), 1000.0, 1.0, "direct route")
+	EventBus.nav_waypoints_set.emit(PackedVector2Array([Vector2(0.0, 1000.0)]))  # detour
+	assert_gt(_helm._plotted_distance(), 2000.0, "RM/ETA distance includes the waypoint detour")
+
+
 func test_arrival_clears_the_plot() -> void:
 	EventBus.nav_target_selected.emit("verdant")
 	assert_ne(_helm._sel_kind, Travel.TargetKind.NONE, "a course is plotted")

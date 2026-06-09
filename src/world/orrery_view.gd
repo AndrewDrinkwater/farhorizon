@@ -345,7 +345,7 @@ func _draw_course() -> void:
 	# adaptively-subdivided curve (the log projection bends a straight real path —
 	# sharpest near the star — and uniform sampling would kink it).
 	var route := _course_route(order)
-	var color := _route_color(route)
+	var color := _route_color(route, Palette.ACCENT)  # engaged → solid accent
 	_draw_route_legs(route, color)
 	for i in range(route.size() - 1):
 		_draw_course_time(route[i], route[i + 1])  # time pips per leg
@@ -362,7 +362,7 @@ func _draw_course() -> void:
 func _draw_plotted_course() -> void:
 	if _preview_route.size() < 2:
 		return
-	var color := _route_color(_preview_route)
+	var color := _route_color(_preview_route, _plot_clear_color())
 	_draw_route_legs(_preview_route, color)
 	for i in range(_preview_route.size() - 1):
 		_draw_course_time(_preview_route[i], _preview_route[i + 1])
@@ -371,17 +371,26 @@ func _draw_plotted_course() -> void:
 	draw_arc(_project_course_point(_preview_route[_preview_route.size() - 1]), 8.0, 0.0, TAU, 24, color, 1.0, true)
 
 
-## Course colour from the worst obstruction along the route (ADR 0028).
-func _route_color(route: PackedVector2Array) -> Color:
+## Course colour from the worst obstruction along the route (ADR 0028): red for a
+## no-go, amber for a hazard, else `clear_color` (which encodes plotted vs laid-in).
+func _route_color(route: PackedVector2Array, clear_color: Color) -> Color:
 	if _system == null:
-		return Palette.ACCENT
+		return clear_color
 	match Zones.route_block(_system, route):
 		Zones.Block.NOGO:
 			return COURSE_NOGO_COLOR
 		Zones.Block.HAZARD:
 			return COURSE_HAZARD_COLOR
 		_:
-			return Palette.ACCENT
+			return clear_color
+
+
+## Clear-course colour: a laid-in course (current_order set) reads solid; a merely
+## plotted one reads dimmer — a subtle "not committed yet" cue (ADR 0028).
+func _plot_clear_color() -> Color:
+	if String(GameState.ship.current_order.get("type", "")) == "course":
+		return Palette.ACCENT
+	return Color(Palette.ACCENT, 0.5)
 
 
 func _under_way() -> bool:

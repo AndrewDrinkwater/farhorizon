@@ -529,15 +529,26 @@ func _refresh_preview() -> void:
 		_eta_readout.set_value("—")
 		_rm_readout.set_value("—")
 		return
-	var preview := FlightMath.preview(GameState.ship.position, _selected_position(), _burn,
-		GameState.ship.reaction_mass)
+	# Over the whole plotted route (ship → waypoints → target), not the direct leg —
+	# so dragging waypoints updates the distance/ETA/RM the captain sees (ADR 0028).
+	var dist := _plotted_distance()
+	var cost := FlightMath.rm_cost(dist, _burn)
 	_target_readout.set_value(_selected_name())
-	_distance_readout.set_value(_format_distance(preview["distance"]))
-	_eta_readout.set_value(_format_eta(preview["eta_ticks"]))
-	var rm_text := _format_rm(preview["rm_cost"])
-	if not bool(preview["affordable"]):
+	_distance_readout.set_value(_format_distance(dist))
+	_eta_readout.set_value(_format_eta(FlightMath.eta_ticks(dist, _burn)))
+	var rm_text := _format_rm(cost)
+	if cost > GameState.ship.reaction_mass:
 		rm_text = "⚠ " + rm_text  # non-colour cue for "can't afford" (ADR 0012)
 	_rm_readout.set_value(rm_text)
+
+
+## Total travel distance over the plotted route's legs (ship → waypoints → target).
+func _plotted_distance() -> float:
+	var route := _compose_route()
+	var total := 0.0
+	for i in range(route.size() - 1):
+		total += route[i].distance_to(route[i + 1])
+	return total
 
 
 func _refresh_status() -> void:
@@ -667,7 +678,7 @@ func _ti_body() -> void:
 		return
 	_ti_name.set_value(tr(body.name_key))
 	_ti_type.set_value(_body_kind_label(body.kind))
-	_set_dist_eta_rm(body.position)
+	_set_route_dist_eta_rm()
 	var bits: Array[String] = []
 	if body.parent_id != "":
 		var parent := _resolve_body(body.parent_id)
@@ -690,7 +701,7 @@ func _ti_contact() -> void:
 	var identified := GameState.contacts.tier_of(_sel_id) == Sensors.Tier.IDENTIFIED
 	_ti_name.set_value(tr(contact.name_key) if identified else tr("NAV_CONTACT_UNKNOWN"))
 	_ti_type.set_value(_contact_kind_label(contact.kind) if identified else tr("NAV_CONTACT_UNKNOWN"))
-	_set_dist_eta_rm(contact.position)
+	_set_route_dist_eta_rm()
 	var bits: Array[String] = [tr("HELM_TI_TIER_IDENTIFIED") if identified else tr("HELM_TI_TIER_BLIP")]
 	if not identified and GameState.ship.position.distance_to(contact.position) <= GameState.ship.sensor_range:
 		bits.append(tr("HELM_TI_SCAN_READY"))
@@ -703,9 +714,10 @@ func _ti_point() -> void:
 	var rel := _sel_point - GameState.ship.position
 	var deg := int(roundf(rad_to_deg(rel.angle())))
 	deg = ((deg % 360) + 360) % 360
-	_ti_dist.set_value(tr("HELM_TI_BEARING_FORMAT").format({"deg": deg, "wu": "%.0f" % rel.length()}))
-	var cost := FlightMath.rm_cost(rel.length(), _burn)
-	_ti_eta.set_value(_format_eta(FlightMath.eta_ticks(rel.length(), _burn)))
+	var dist := _plotted_distance()
+	_ti_dist.set_value(tr("HELM_TI_BEARING_FORMAT").format({"deg": deg, "wu": "%.0f" % dist}))
+	var cost := FlightMath.rm_cost(dist, _burn)
+	_ti_eta.set_value(_format_eta(FlightMath.eta_ticks(dist, _burn)))
 	_ti_rm.set_value("%s — %s" % [_format_rm(cost), _reach_label(cost)])
 	_ti_status.set_value("—")
 
@@ -719,9 +731,10 @@ func _ti_none() -> void:
 	_ti_status.set_value(_overview_text())
 
 
-## Distance (AU + wu), ETA, and RM-cost-with-reachability for a destination point.
-func _set_dist_eta_rm(pos: Vector2) -> void:
-	var d := GameState.ship.position.distance_to(pos)
+## Route distance (AU + wu), ETA, and RM-cost-with-reachability over the whole
+## plotted route (ship → waypoints → target), so waypoint drags update it (ADR 0028).
+func _set_route_dist_eta_rm() -> void:
+	var d := _plotted_distance()
 	_ti_dist.set_value(tr("HELM_TI_DIST_FORMAT").format({
 		"au": "%.2f" % (d / Travel.WU_PER_AU), "wu": "%.0f" % d,
 	}))

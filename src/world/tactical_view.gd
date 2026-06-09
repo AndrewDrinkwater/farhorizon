@@ -231,21 +231,21 @@ func _draw_course() -> void:
 		return
 	# True scale → straight legs through the route's waypoints to the destination
 	# (ADR 0020/0027). Ship maps to the scope centre.
-	_draw_route(_course_route(order), 3.0)
+	_draw_route(_course_route(order), 3.0, Palette.ACCENT)  # engaged → solid accent
 
 
 ## The editable plotted course (compose route), coloured by obstruction (ADR 0028);
 ## waypoint handles drawn fatter so they can be grabbed.
 func _draw_plotted_course() -> void:
 	if _preview_route.size() >= 2:
-		_draw_route(_preview_route, WAYPOINT_HANDLE_PX)
+		_draw_route(_preview_route, WAYPOINT_HANDLE_PX, _plot_clear_color())
 
 
 ## Draw a true-scale route (straight legs) coloured by its worst obstruction.
-func _draw_route(route: PackedVector2Array, handle_px: float) -> void:
+func _draw_route(route: PackedVector2Array, handle_px: float, clear_color: Color) -> void:
 	if route.size() < 2:
 		return
-	var color := _route_color(route)
+	var color := _route_color(route, clear_color)
 	var screen := PackedVector2Array()
 	for p: Vector2 in route:
 		screen.append(_to_screen(p))
@@ -254,16 +254,23 @@ func _draw_route(route: PackedVector2Array, handle_px: float) -> void:
 		draw_circle(_to_screen(route[i]), handle_px, color)
 
 
-func _route_color(route: PackedVector2Array) -> Color:
+func _route_color(route: PackedVector2Array, clear_color: Color) -> Color:
 	if _system == null:
-		return Palette.ACCENT
+		return clear_color
 	match Zones.route_block(_system, route):
 		Zones.Block.NOGO:
 			return COURSE_NOGO_COLOR
 		Zones.Block.HAZARD:
 			return COURSE_HAZARD_COLOR
 		_:
-			return Palette.ACCENT
+			return clear_color
+
+
+## Laid-in course (current_order set) reads solid; a merely plotted one dimmer.
+func _plot_clear_color() -> Color:
+	if String(GameState.ship.current_order.get("type", "")) == "course":
+		return Palette.ACCENT
+	return Color(Palette.ACCENT, 0.5)
 
 
 func _under_way() -> bool:
