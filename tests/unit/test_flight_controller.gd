@@ -323,6 +323,20 @@ func test_surface_move_changes_site() -> void:
 	assert_eq(GameState.ship.location, Travel.Location.LANDED, "still landed after the move")
 
 
+func test_resync_resumes_an_in_progress_descent() -> void:
+	# As if a save was loaded mid-descent (ADR 0029 persistence).
+	GameState.ship.location = Travel.Location.HOLDING
+	GameState.ship.location_body_id = "verdant"
+	GameState.ship.current_order = {"type": "land", "site_id": "", "ticks_total": 8, "ticks_left": 3}
+	EventBus.game_state_loaded.emit()
+	assert_eq(_fc.get_state(), FlightCore.State.DESCENDING, "resumes the descent phase on load")
+	for i in range(10):
+		if GameState.ship.location == Travel.Location.LANDED:
+			break
+		EventBus.sim_tick.emit(i + 1)
+	assert_eq(GameState.ship.location, Travel.Location.LANDED, "descent completes from the saved ticks")
+
+
 func test_resync_after_load_resumes_transit() -> void:
 	var rubicon := _find("rubicon")
 	GameState.ship.position = rubicon.position * 0.5

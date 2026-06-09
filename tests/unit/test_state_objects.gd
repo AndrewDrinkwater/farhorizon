@@ -46,6 +46,21 @@ func test_contacts_state_round_trip() -> void:
 	assert_eq(back.tier_of("unknown"), Sensors.Tier.UNDETECTED, "absent = undetected")
 
 
+func test_ship_state_surface_fields_round_trip() -> void:
+	var s := ShipState.new()
+	s.location = Travel.Location.LANDED
+	s.surface_site_id = "verdant_outpost"
+	s.surface_speed_su_per_tick = 75.0
+	s.base_descent_ticks = 9
+	s.current_order = {"type": "surface_move", "site_id": "x", "ticks_left": 2, "ticks_total": 5}
+	var back := ShipState.from_dict(s.to_dict())
+	assert_eq(back.location, Travel.Location.LANDED, "landed location persists")
+	assert_eq(back.surface_site_id, "verdant_outpost", "surface site persists (ADR 0030)")
+	assert_almost_eq(back.surface_speed_su_per_tick, 75.0, 0.001)
+	assert_eq(back.base_descent_ticks, 9)
+	assert_eq(int(back.current_order.get("ticks_left")), 2, "in-progress transition persists")
+
+
 func test_zones_state_round_trip() -> void:
 	var z := ZonesState.new()
 	z.mark_fired("drift_signal")
