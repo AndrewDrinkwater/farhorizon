@@ -73,6 +73,16 @@ VOICE_SHIP_SURFACE_MOVING,Moving out.
 VOICE_SHIP_ARRIVED_SITE,Arrived on site.
 ORDER_REJECT_NOT_LANDABLE,Unable — not a landable body.
 ORDER_REJECT_NOT_LANDED,Unable — not landed.
+HELM_SITE_LABEL,Site
+HELM_SURFACE_DIST_FORMAT,{su} su
+HELM_MOVE_TO,move to {site}
+HELM_ATMOSPHERE,Atmosphere: {class}
+HELM_SURFACE_AT,At: {site}
+ATMO_NONE,None (vacuum)
+ATMO_THIN,Thin
+ATMO_STANDARD,Standard
+ATMO_DENSE,Dense
+ATMO_CRUSHING,Crushing
 HELM_CONSOLE_NAME,Helm
 HELM_LAY_IN_COURSE,Lay In Course
 HELM_ENGAGE,Engage

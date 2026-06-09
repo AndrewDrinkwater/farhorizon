@@ -19,8 +19,10 @@ var _sel_id: String = ""
 var _sel_point: Vector2 = Vector2.ZERO
 var _route_waypoints: Array[Vector2] = []  # intermediate route points (ADR 0027)
 var _plot_laid_in: bool = false  # has the current plot been laid in? (solid vs dashed, ADR 0028)
-var _land_site_id: String = ""       # site to land at ("" = Open Landing); set by the picker (ADR 0030)
-var _surface_target_id: String = ""  # selected surface destination for Move (ADR 0030)
+var _surface_target_id: String = ""  # picked surface site — land/move destination ("" = Open Landing, ADR 0030)
+var _picker_key: String = ""  # cached picker context (body+location), rebuilt when it changes
+var _site_picker: HBoxContainer
+var _site_buttons: Dictionary = {}  # site id:String -> TButton
 var _burn: int = FlightMath.Burn.STANDARD
 var _scale: int = OrreryParams.ScaleMode.LOG  # orrery schematic ↔ true scale (ADR 0021)
 var _ring_mode: int = TacticalView.RingMode.ISOCHRONE  # scope ETA ↔ distance rings
@@ -156,6 +158,13 @@ func _build_course_order() -> void:
 	row3.add_child(_make_action("take_off", "HELM_TAKE_OFF", _take_off))
 	row3.add_child(_make_action("move", "HELM_MOVE", _move))
 
+	# Landing-site picker (ADR 0030): Open Landing + the body's sites; shown only when
+	# holding at a landable body or landed. Rebuilt when that context changes.
+	_site_picker = HBoxContainer.new()
+	_site_picker.add_theme_constant_override("separation", 4)
+	_site_picker.visible = false
+	c.add_child(_site_picker)
+
 	_refresh_burn_buttons()
 
 
@@ -244,6 +253,7 @@ func _connect_bus() -> void:
 	EventBus.flight_state_changed.connect(_on_flight_state_changed)
 	EventBus.course_completed.connect(_on_course_completed)
 	EventBus.nav_view_changed.connect(_on_view_changed)
+	EventBus.surface_site_selected.connect(_on_surface_site_selected)
 	EventBus.ship_context_changed.connect(_refresh_all)
 	EventBus.sim_tick.connect(_on_tick.unbind(1))
 	EventBus.fuel_changed.connect(_on_fuel_changed)
@@ -493,7 +503,7 @@ func _undock() -> void:
 
 
 func _land() -> void:
-	EventBus.order_issued.emit({"type": "land", "site_id": _land_site_id})
+	EventBus.order_issued.emit({"type": "land", "site_id": _surface_target_id})
 
 
 func _take_off() -> void:
@@ -541,6 +551,7 @@ func _refresh_actions() -> void:
 	if _action_buttons.has("clear_course"):
 		_action_buttons["clear_course"].disabled = _sel_kind == Travel.TargetKind.NONE \
 			and _route_waypoints.is_empty() and not _has_course()
+	_refresh_site_picker()
 
 
 ## Does the current selection (a body) have any moons? (ADR 0022)
@@ -595,6 +606,84 @@ func _has_other_surface_site(body: BodyData) -> bool:
 	if GameState.ship.surface_site_id != "":
 		return true
 	return not body.surface_locations.is_empty()
+
+
+# --- Surface site picker (ADR 0030) ---
+
+func _on_surface_site_selected(site_id: String) -> void:
+	_surface_target_id = site_id
+	_refresh_site_buttons()
+	_refresh_target_info()
+
+
+## A picker button (or the SurfaceView) picked a site — funnel through one signal.
+func _select_site(site_id: String) -> void:
+	EventBus.surface_site_selected.emit(site_id)
+
+
+## The body whose sites the picker lists: the landed body, or a landable body we're
+## holding at. Null otherwise (picker hidden).
+func _picker_body() -> BodyData:
+	var ship: ShipState = GameState.ship
+	if ship.location == Travel.Location.LANDED:
+		return _resolve_body(ship.location_body_id)
+	if ship.location == Travel.Location.HOLDING:
+		var body := _resolve_body(ship.location_body_id)
+		if body != null and body.landable:
+			return body
+	return null
+
+
+## Rebuild the picker only when its context (body + location) changes; else just
+## re-highlight. Cheap to call from _refresh_actions.
+func _refresh_site_picker() -> void:
+	if _site_picker == null:
+		return
+	var body := _picker_body()
+	var key := "%s|%d" % ["" if body == null else body.id, GameState.ship.location]
+	if key != _picker_key:
+		_picker_key = key
+		_rebuild_site_picker(body)
+	_refresh_site_buttons()
+
+
+func _rebuild_site_picker(body: BodyData) -> void:
+	for child: Node in _site_picker.get_children():
+		child.queue_free()
+	_site_buttons.clear()
+	_site_picker.visible = body != null
+	if body == null:
+		return
+	var caption := Label.new()
+	caption.text = tr("HELM_SITE_LABEL")
+	caption.add_theme_color_override("font_color", Palette.TEXT_DIM)
+	_site_picker.add_child(caption)
+	_add_site_button("", "HELM_OPEN_LANDING")
+	for loc: SurfaceLocationData in body.surface_locations:
+		_add_site_button(loc.id, loc.name_key)
+
+
+func _add_site_button(site_id: String, label_key: String) -> void:
+	var button := TButton.new().setup(label_key, _select_site.bind(site_id))
+	_site_picker.add_child(button)
+	_site_buttons[site_id] = button
+
+
+func _refresh_site_buttons() -> void:
+	for site_id: String in _site_buttons:
+		_site_buttons[site_id].modulate = Palette.ACCENT if site_id == _surface_target_id else Color.WHITE
+
+
+## Surface position (su) of a site id on a body ("" = Open Landing).
+func _surface_pos(body: BodyData, site_id: String) -> Vector2:
+	if body == null:
+		return Vector2.ZERO
+	if site_id == "":
+		return body.wild_touchdown
+	for loc: SurfaceLocationData in body.surface_locations:
+		if loc.id == site_id:
+			return loc.surface_position
+	return body.wild_touchdown
 
 
 func _refresh_preview() -> void:
@@ -654,11 +743,18 @@ func _status_visual() -> Array:
 			"body": _order_destination_name(),
 		})
 		return [Palette.STATUS_NOMINAL, "»", bound]
+	if _in_transition():  # descent / ascent / surface move (ADR 0029/0030)
+		var phase := tr("TRAVEL_DESCENDING_TO").format({
+			"phase": tr(FlightCore.state_key(_flight_state)), "body": _location_name(),
+		})
+		return [Palette.STATUS_NOMINAL, "»", phase]
 	match ship.location:
 		Travel.Location.DOCKED:
 			return [Palette.STATUS_INFO, "⚓", tr("TRAVEL_DOCKED_AT").format({"body": _location_name()})]
 		Travel.Location.HOLDING:
 			return [Palette.STATUS_INFO, "◎", tr("TRAVEL_HOLDING_AT").format({"body": _location_name()})]
+		Travel.Location.LANDED:
+			return [Palette.STATUS_INFO, "⏷", tr("TRAVEL_LANDED_AT").format({"body": _location_name()})]
 		_:
 			if _has_course():
 				return [Palette.STATUS_INFO, "▷", tr("TRAVEL_COURSE_LAID_IN")]
@@ -716,6 +812,12 @@ func _location_name() -> String:
 ## Populate the Target Info panel for the current selection, burn-aware.
 func _refresh_target_info() -> void:
 	if _ti_name == null:
+		return
+	# Surface context (ADR 0030): while landed (or holding at a landable body with a
+	# site picked) the Target Info describes the surface destination, not a space target.
+	if GameState.ship.location == Travel.Location.LANDED:
+		_ti_surface()
+		_refresh_route_line()
 		return
 	match _sel_kind:
 		Travel.TargetKind.BODY:
@@ -796,6 +898,47 @@ func _ti_point() -> void:
 	_ti_eta.set_value(_format_eta(FlightMath.eta_ticks(dist, _burn)))
 	_ti_rm.set_value("%s — %s" % [_format_rm(cost), _reach_label(cost)])
 	_ti_status.set_value("—")
+
+
+## Target Info while landed: where we are, the picked move target + planetary ETA,
+## and the body's atmosphere class (ADR 0029/0030). Surface moves cost time only.
+func _ti_surface() -> void:
+	var body := _resolve_body(GameState.ship.location_body_id)
+	_ti_name.set_value(_site_name(body, GameState.ship.surface_site_id))
+	_ti_type.set_value(_atmosphere_label(body))
+	if body != null and _surface_target_id != GameState.ship.surface_site_id:
+		var d := _surface_pos(body, GameState.ship.surface_site_id).distance_to(
+			_surface_pos(body, _surface_target_id))
+		var ticks := SurfaceMath.surface_ticks(_surface_pos(body, GameState.ship.surface_site_id),
+			_surface_pos(body, _surface_target_id), GameState.ship.surface_speed_su_per_tick)
+		_ti_dist.set_value(tr("HELM_SURFACE_DIST_FORMAT").format({"su": "%.0f" % d}))
+		_ti_eta.set_value(_format_eta(ticks))
+		_ti_status.set_value(tr("HELM_MOVE_TO").format({"site": _site_name(body, _surface_target_id)}))
+	else:
+		_ti_dist.set_value("—")
+		_ti_eta.set_value("—")
+		_ti_status.set_value(tr("TRAVEL_LANDED"))
+	_ti_rm.set_value("—")  # surface moves are time only (ADR 0029)
+
+
+## Display name of a surface site ("" = Open Landing).
+func _site_name(body: BodyData, site_id: String) -> String:
+	if site_id == "":
+		return tr("HELM_OPEN_LANDING")
+	if body != null:
+		for loc: SurfaceLocationData in body.surface_locations:
+			if loc.id == site_id:
+				return tr(loc.name_key)
+	return tr("HELM_OPEN_LANDING")
+
+
+## "Atmosphere: <class>" for the body, or a dash (ADR 0029).
+func _atmosphere_label(body: BodyData) -> String:
+	if body == null:
+		return "—"
+	var keys := ["ATMO_NONE", "ATMO_THIN", "ATMO_STANDARD", "ATMO_DENSE", "ATMO_CRUSHING"]
+	var cls := LandingMath.atmosphere_class(body.atmosphere_atm)
+	return tr("HELM_ATMOSPHERE").format({"class": tr(keys[cls])})
 
 
 func _ti_none() -> void:

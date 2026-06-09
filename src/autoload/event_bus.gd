@@ -36,6 +36,9 @@ signal nav_ring_mode_changed(mode: int)
 ## A moon-bearing planet was focused / the focus inset closed (ADR 0022).
 signal nav_focus_requested(body_id: String)
 signal nav_focus_closed()
+## A surface site was picked (SurfaceView or the Helm picker) — "" = Open Landing.
+## The chosen landing/move destination (ADR 0030).
+signal surface_site_selected(site_id: String)
 ## The compose-time route changed (ADR 0027/0028) — ship → waypoints → destination;
 ## the nav views draw it as the plotted course (solid if `laid_in`, else dashed).
 ## Empty route = nothing plotted.
