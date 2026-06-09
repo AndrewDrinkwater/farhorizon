@@ -426,7 +426,7 @@ func _find(id: String) -> BodyData:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not visible or _system == null:
+	if not is_visible_in_tree() or _system == null:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:

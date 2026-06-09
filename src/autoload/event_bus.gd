@@ -79,6 +79,10 @@ signal fuel_changed(pool: int, value: float)
 signal system_change_requested(system_id: String)  # intent
 signal system_changed(system_id: String)            # done — nav systems re-init
 
+# --- Console shell (ADR 0031) ---
+## The active console changed (pure UI; carries the new console id).
+signal console_changed(console_id: String)
+
 # --- Lifecycle ---
 signal game_state_loaded()
 signal settings_changed(key: String)

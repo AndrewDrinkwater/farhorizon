@@ -26,6 +26,9 @@ const DEFAULTS: Dictionary = {
 	"localization": {
 		"locale": "en",
 	},
+	"console": {
+		"last_id": "helm",  # which console the shell reopens on (ADR 0031)
+	},
 }
 
 var _config: ConfigFile = ConfigFile.new()

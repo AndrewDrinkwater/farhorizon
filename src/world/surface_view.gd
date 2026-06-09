@@ -203,7 +203,7 @@ func _ship_surface_pos() -> Vector2:
 # --- Input (pick a site or a free point) ---
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not visible or _body == null:
+	if not is_visible_in_tree() or _body == null:
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		var mouse := get_viewport().get_mouse_position()

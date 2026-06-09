@@ -6,22 +6,12 @@ extends Node
 ## via EventBus. The debug overlay sits on top.
 
 const TimeControlsScene := preload("res://src/ui/shell/time_controls.gd")
-const HelmConsoleScene := preload("res://src/ui/consoles/helm_console.gd")
-const OrreryViewScene := preload("res://src/world/orrery_view.gd")
-const TacticalViewScene := preload("res://src/world/tactical_view.gd")
-const MoonInsetViewScene := preload("res://src/world/moon_inset_view.gd")
-const SurfaceViewScene := preload("res://src/world/surface_view.gd")
+const ConsoleShellScene := preload("res://src/ui/shell/console_shell.gd")
 const DebugOverlay := preload("res://src/ui/components/debug_overlay.gd")
 const DebugConsoleScene := preload("res://src/ui/components/debug_console.gd")
 
 ## Starting system until a save/new-game flow chooses one.
 const DEFAULT_SYSTEM_ID: String = "sol"
-
-var _orrery: OrreryView
-var _tactical: TacticalView
-var _surface: SurfaceView
-var _tactical_active: bool = false  # T toggles this when not landed
-var _surface_pick: bool = false  # Helm requested the surface map for an Open-Landing pick (ADR 0030)
 
 
 func _ready() -> void:
@@ -34,42 +24,10 @@ func _ready() -> void:
 	_build_ui()
 	add_child(DebugOverlay.new())
 	add_child(DebugConsoleScene.new())  # ` to toggle (ADR 0024)
-	# Swap orrery/scope ↔ surface as the ship lands / takes off (ADR 0030).
-	EventBus.ship_context_changed.connect(_update_nav_views)
-	EventBus.game_state_loaded.connect(_update_nav_views)
-	EventBus.system_changed.connect(_update_nav_views.unbind(1))
-	EventBus.surface_map_requested.connect(_on_surface_map_requested)
-	_update_nav_views()
 
-	print("[Far Horizon] boot — v%s, schema %d · system '%s' (Space=pause, [/]=speed, T=tactical, F3=debug, F5/F9=save/load)" % [
+	print("[Far Horizon] boot — v%s, schema %d · system '%s' (Space=pause, [/]=speed, Tab=console, T=tactical, F3=debug, F5/F9=save/load)" % [
 		GameVersion.GAME_VERSION, GameVersion.SAVE_SCHEMA_VERSION, GameState.system.system_id,
 	])
-
-
-## Toggle the strategic orrery ↔ the tactical scope (ignored while landed — the
-## surface view owns the Nav Plot then).
-func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("toggle_tactical") and _orrery != null \
-			and GameState.ship.location != Travel.Location.LANDED and not _surface_pick:
-		_tactical_active = not _tactical_active
-		_update_nav_views()
-		EventBus.nav_view_changed.emit(_tactical_active)  # retarget the Helm mode toggle
-
-
-func _on_surface_map_requested(show: bool) -> void:
-	_surface_pick = show
-	_update_nav_views()
-
-
-## Show the surface map while LANDED or picking a landing spot, else the orrery or
-## scope per the T toggle.
-func _update_nav_views() -> void:
-	if _orrery == null:
-		return
-	var surface_on := GameState.ship.location == Travel.Location.LANDED or _surface_pick
-	_surface.visible = surface_on
-	_orrery.visible = not surface_on and not _tactical_active
-	_tactical.visible = not surface_on and _tactical_active
 
 
 ## Pick a starting system if none is loaded yet (fresh run). A loaded save will
@@ -86,8 +44,9 @@ func _bootstrap_system() -> void:
 
 
 ## UI under a CanvasLayer + themed root Control (screen-fixed, inherits the
-## terminal theme). The orrery Nav Plot is the back layer; the console + time
-## controls draw over it. The root ignores mouse so empty clicks reach the orrery.
+## terminal theme). The console shell (ADR 0031) hosts the consoles + their stages;
+## the time controls are persistent chrome on top. Root ignores mouse so empty
+## clicks reach the active console's stage.
 func _build_ui() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -98,28 +57,9 @@ func _build_ui() -> void:
 	root.theme = TerminalTheme.build()
 	layer.add_child(root)
 
-	var system := TypeRegistry.get_system(GameState.system.system_id)
-	if system != null:
-		_orrery = OrreryViewScene.new()
-		root.add_child(_orrery)
-		_orrery.build(system)
-		_tactical = TacticalViewScene.new()
-		_tactical.visible = false  # orrery is the default; T toggles to tactical
-		root.add_child(_tactical)
-		_tactical.build(system)
-		_surface = SurfaceViewScene.new()
-		_surface.visible = false  # shown only while LANDED (ADR 0030)
-		root.add_child(_surface)
-		_surface.build(system)
+	root.add_child(ConsoleShellScene.new())  # consoles + console bar (ADR 0031)
 
+	# Persistent terminal chrome: the mission clock + time controls (ADR 0006).
 	var time_controls := TimeControlsScene.new()
 	time_controls.position = Vector2(16.0, 12.0)
 	root.add_child(time_controls)
-
-	root.add_child(HelmConsoleScene.new())
-
-	# Focus inset draws over the console (ADR 0022); hidden until a planet is focused.
-	if system != null:
-		var inset := MoonInsetViewScene.new()
-		root.add_child(inset)
-		inset.build(system)

@@ -11,6 +11,18 @@ extends Control
 
 const POST: String = "helm"
 
+# The Helm owns the nav-view stage (ADR 0031): orrery / tactical scope / surface /
+# focus inset, drawn behind its panels. The shell shows it only while Helm is active.
+const OrreryViewScene := preload("res://src/world/orrery_view.gd")
+const TacticalViewScene := preload("res://src/world/tactical_view.gd")
+const SurfaceViewScene := preload("res://src/world/surface_view.gd")
+const MoonInsetViewScene := preload("res://src/world/moon_inset_view.gd")
+
+var _orrery: OrreryView
+var _tactical: TacticalView
+var _surface: SurfaceView
+var _surface_pick: bool = false  # surface map requested for an Open-Landing pick (ADR 0030)
+
 # Compose state — the Nav Plot selection: a body, a contact, or a free point
 # (ADR 0020). `_sel_id` is the body/contact id ("" for a point); `_sel_point` is
 # the destination for a free waypoint.
@@ -71,12 +83,15 @@ func _ready() -> void:
 	offset_right = 0.0
 	offset_bottom = 0.0
 	mouse_filter = Control.MOUSE_FILTER_IGNORE  # let map clicks through; panels still catch theirs
+	_build_stage()        # nav views first → drawn behind the panels (ADR 0031)
 	_build_course_order()
 	_build_scale_toggle()
 	_build_flight_status()
 	_build_target_info()
+	_build_inset()        # focus inset draws over the panels (ADR 0022)
 	_connect_bus()
 	_refresh_all()
+	_update_nav_views()
 	EventBus.nav_burn_changed.emit(_burn)  # sync the nav views to the starting burn (ADR 0019)
 	EventBus.nav_scale_changed.emit(_scale)  # sync the orrery to the starting scale (ADR 0021)
 	EventBus.nav_ring_mode_changed.emit(_ring_mode)  # sync the scope's ring mode
@@ -94,6 +109,59 @@ func _place(ctrl: Control, al: float, at: float, ar: float, ab: float,
 	ctrl.offset_top = ot
 	ctrl.offset_right = oright
 	ctrl.offset_bottom = ob
+
+
+# --- Nav-view stage (ADR 0031, moved from the shell root) ---
+
+## Build the nav views as children behind the panels (added before them in _ready).
+func _build_stage() -> void:
+	var system := TypeRegistry.get_system(GameState.system.system_id)
+	if system == null:
+		return
+	_orrery = OrreryViewScene.new()
+	add_child(_orrery)
+	_orrery.build(system)
+	_tactical = TacticalViewScene.new()
+	_tactical.visible = false
+	add_child(_tactical)
+	_tactical.build(system)
+	_surface = SurfaceViewScene.new()
+	_surface.visible = false
+	add_child(_surface)
+	_surface.build(system)
+
+
+## Focus inset (ADR 0022): drawn over the panels, so added last.
+func _build_inset() -> void:
+	if _orrery == null:
+		return
+	var inset := MoonInsetViewScene.new()
+	add_child(inset)
+	inset.build(TypeRegistry.get_system(GameState.system.system_id))
+
+
+## Toggle the strategic orrery ↔ the tactical scope (ignored while landed / picking,
+## and while another console is active). The surface owns the stage when landed.
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("toggle_tactical") and is_visible_in_tree() and _orrery != null \
+			and GameState.ship.location != Travel.Location.LANDED and not _surface_pick:
+		EventBus.nav_view_changed.emit(not _tactical_active)  # _on_view_changed applies it
+
+
+func _on_surface_map_requested(show: bool) -> void:
+	_surface_pick = show
+	_update_nav_views()
+
+
+## Show the surface map while LANDED or picking a landing spot, else the orrery or
+## scope per the T toggle (ADR 0030/0031).
+func _update_nav_views() -> void:
+	if _orrery == null:
+		return
+	var surface_on := GameState.ship.location == Travel.Location.LANDED or _surface_pick
+	_surface.visible = surface_on
+	_orrery.visible = not surface_on and not _tactical_active
+	_tactical.visible = not surface_on and _tactical_active
 
 
 # --- Course Order region (compose + issue) ---
@@ -258,12 +326,15 @@ func _connect_bus() -> void:
 	EventBus.nav_view_changed.connect(_on_view_changed)
 	EventBus.surface_site_selected.connect(_on_surface_site_selected)
 	EventBus.surface_point_selected.connect(_on_surface_point_selected)
+	EventBus.surface_map_requested.connect(_on_surface_map_requested)
+	EventBus.ship_context_changed.connect(_update_nav_views)
 	EventBus.ship_context_changed.connect(_refresh_all)
 	EventBus.sim_tick.connect(_on_tick.unbind(1))
 	EventBus.fuel_changed.connect(_on_fuel_changed)
 	EventBus.order_acknowledged.connect(_on_order_acknowledged)
 	EventBus.order_rejected.connect(_on_order_rejected)
 	EventBus.game_state_loaded.connect(_refresh_all)
+	EventBus.game_state_loaded.connect(_update_nav_views)
 	EventBus.system_changed.connect(_on_system_changed)
 
 
@@ -274,6 +345,7 @@ func _on_system_changed(_system_id: String) -> void:
 	_sel_point = Vector2.ZERO
 	_route_waypoints.clear()
 	_refresh_all()
+	_update_nav_views()
 	_emit_route()
 
 
@@ -418,6 +490,7 @@ func _select_ring_mode(mode: int) -> void:
 
 func _on_view_changed(tactical: bool) -> void:
 	_tactical_active = tactical
+	_update_nav_views()
 	_refresh_toggle()
 
 

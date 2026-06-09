@@ -586,7 +586,7 @@ func _marker_px(kind: int) -> float:
 # --- Input (screen-space pick) ---
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not visible or _system == null:
+	if not is_visible_in_tree() or _system == null:
 		return
 	if event is InputEventMouseButton:
 		if event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_UP:
