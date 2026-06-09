@@ -140,7 +140,7 @@ func _build_course_order() -> void:
 	row2.add_child(_make_action("undock", "HELM_UNDOCK", _undock))
 	row2.add_child(_make_action("scan", "HELM_SCAN", _scan))
 	row2.add_child(_make_action("focus", "HELM_FOCUS", _focus))
-	row2.add_child(_make_action("clear_route", "HELM_CLEAR_ROUTE", _clear_route))
+	row2.add_child(_make_action("clear_course", "HELM_CLEAR_COURSE", _clear_route))
 
 	_refresh_burn_buttons()
 
@@ -225,6 +225,7 @@ func _build_target_info() -> void:
 func _connect_bus() -> void:
 	EventBus.nav_target_selected.connect(_on_target_selected)
 	EventBus.nav_point_selected.connect(_on_point_selected)
+	EventBus.nav_waypoints_set.connect(_on_waypoints_set)
 	EventBus.contact_detected.connect(_on_contacts_changed.unbind(1))
 	EventBus.contact_lost.connect(_on_contacts_changed.unbind(1))
 	EventBus.contact_promoted.connect(_on_contacts_changed.unbind(2))
@@ -263,23 +264,35 @@ func _on_target_selected(target_id: String) -> void:
 	_emit_route()
 
 
-## An empty-space click (ADR 0020/0027): with a body/contact target it adds a route
-## waypoint to plot around obstacles; otherwise it sets a free-point destination.
+## An empty-space click (ADR 0020/0028) plots a direct course to that free point.
+## Route waypoints are now added by dragging the course line (nav_waypoints_set).
 func _on_point_selected(point: Vector2) -> void:
-	if _sel_kind == Travel.TargetKind.BODY or _sel_kind == Travel.TargetKind.CONTACT:
-		_route_waypoints.append(point)
-	else:
-		_sel_kind = Travel.TargetKind.POINT
-		_sel_id = ""
-		_sel_point = point
-		_route_waypoints.clear()
+	_sel_kind = Travel.TargetKind.POINT
+	_sel_id = ""
+	_sel_point = point
+	_route_waypoints.clear()
 	_refresh_preview()
 	_refresh_actions()
 	_emit_route()
 
 
+## A nav view dragged the course (ADR 0028): adopt the new waypoint list.
+func _on_waypoints_set(waypoints: PackedVector2Array) -> void:
+	_route_waypoints.assign(waypoints)
+	_refresh_preview()
+	_refresh_actions()
+	_emit_route()
+
+
+## Clear Course (ADR 0028): wipe the plotted course entirely — selection,
+## waypoints, and any not-engaged laid-in order.
 func _clear_route() -> void:
+	_sel_kind = Travel.TargetKind.NONE
+	_sel_id = ""
+	_sel_point = Vector2.ZERO
 	_route_waypoints.clear()
+	EventBus.order_issued.emit({"type": "clear_course"})
+	EventBus.nav_target_selected.emit("")  # clear the views' selection highlight
 	_refresh_preview()
 	_refresh_actions()
 	_emit_route()
@@ -402,6 +415,8 @@ func _focus() -> void:
 
 
 func _engage() -> void:
+	if _sel_kind != Travel.TargetKind.NONE:
+		_lay_in_course()  # (re)issue the plotted route so what flies is the live plot (ADR 0028)
 	EventBus.order_issued.emit({"type": "engage"})
 
 
@@ -455,8 +470,9 @@ func _refresh_actions() -> void:
 	# Focus is a view request, not a travel order — gate it on "selection has moons".
 	if _action_buttons.has("focus"):
 		_action_buttons["focus"].disabled = not _selection_has_moons()
-	if _action_buttons.has("clear_route"):
-		_action_buttons["clear_route"].disabled = _route_waypoints.is_empty()
+	if _action_buttons.has("clear_course"):
+		_action_buttons["clear_course"].disabled = _sel_kind == Travel.TargetKind.NONE \
+			and _route_waypoints.is_empty() and not _has_course()
 
 
 ## Does the current selection (a body) have any moons? (ADR 0022)

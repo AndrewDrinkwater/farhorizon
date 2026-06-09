@@ -58,15 +58,24 @@ func test_acknowledgment_shows_a_transient_line() -> void:
 	assert_almost_eq(_helm._ack_line.modulate.a, 1.0, 0.01, "shown at full opacity before fading")
 
 
-func test_waypoints_compose_into_the_route_order() -> void:
+func test_dragged_waypoints_compose_into_the_route_order() -> void:
 	watch_signals(EventBus)
 	EventBus.nav_target_selected.emit("verdant")
-	EventBus.nav_point_selected.emit(Vector2(0.0, 500.0))  # with a target, this adds a waypoint
-	EventBus.nav_point_selected.emit(Vector2(500.0, 500.0))
+	# Waypoints now arrive from dragging the course line (ADR 0028).
+	EventBus.nav_waypoints_set.emit(PackedVector2Array([Vector2(0.0, 500.0), Vector2(500.0, 500.0)]))
 	_helm._lay_in_course()
 	var order: Dictionary = get_signal_parameters(EventBus, "order_issued", 0)[0]
 	assert_eq(order.get("target_id"), "verdant", "still bound for the body")
-	assert_eq(order.get("waypoints").size(), 2, "both waypoints composed into the route")
+	assert_eq(order.get("waypoints").size(), 2, "dragged waypoints composed into the route")
+
+
+func test_clear_course_resets_selection_and_emits_clear() -> void:
+	EventBus.nav_target_selected.emit("verdant")
+	watch_signals(EventBus)
+	_helm._clear_route()
+	var order: Dictionary = get_signal_parameters(EventBus, "order_issued", 0)[0]
+	assert_eq(order.get("type"), "clear_course", "issues a clear_course order")
+	assert_eq(_helm._sel_kind, Travel.TargetKind.NONE, "selection wiped")
 
 
 func test_target_info_reflects_a_selected_body() -> void:

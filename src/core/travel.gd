@@ -65,8 +65,8 @@ static func available(context: Dictionary) -> Dictionary:
 	var tier: int = int(context.get("nav_target_tier", Sensors.Tier.UNDETECTED))
 	var route_nogo: bool = bool(context.get("route_nogo", false))  # a no-go on the route (ADR 0027)
 	return {
-		"lay_in": has_selection and not nav_here and not in_transit and not route_nogo,
-		"engage": has_course and not in_transit and location != Location.DOCKED,
+		"lay_in": has_selection and not nav_here and not in_transit,
+		"engage": has_course and not in_transit and location != Location.DOCKED and not route_nogo,
 		"belay": in_transit,
 		"all_stop": in_transit,
 		"dock": location == Location.HOLDING and can_dock_here and not in_transit,

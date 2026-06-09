@@ -47,6 +47,8 @@ func _on_order_issued(order: Dictionary) -> void:
 			_undock()
 		"scan":
 			_scan(order)
+		"clear_course":
+			_clear_course()
 		_:
 			EventBus.order_rejected.emit("ORDER_REJECT_UNKNOWN")
 
@@ -83,13 +85,9 @@ func _set_course(order: Dictionary) -> void:
 	if body == null and FlightCore.has_arrived(GameState.ship.position, dest):
 		EventBus.order_rejected.emit("ORDER_REJECT_ALREADY_HERE")
 		return
-	# Obstacle check (ADR 0027): a no-go crossing on any leg blocks the course; the
-	# captain routes around with waypoints. (Hazard crossings are allowed — warned
-	# at compose on the Helm.)
+	# A no-go crossing no longer blocks Lay In (ADR 0028) — the course plots (drawn
+	# red) and Engage is what's blocked, so the captain can drag it clear first.
 	var waypoints: Array = order.get("waypoints", [])
-	if _route_blocked(waypoints, dest):
-		EventBus.order_rejected.emit("ORDER_REJECT_OBSTRUCTION")
-		return
 	GameState.ship.current_order = {
 		"type": "course",
 		"target_id": target_id,
@@ -126,6 +124,11 @@ func _engage() -> void:
 		EventBus.order_rejected.emit("ORDER_REJECT_DOCKED")
 		return
 	var order: Dictionary = GameState.ship.current_order
+	# No-go is a hard boundary at Engage (ADR 0028): refuse to fly a route whose any
+	# leg crosses a no-go zone — the captain must drag it clear first.
+	if _route_blocked(order.get("waypoints", []), _destination(order)):
+		EventBus.order_rejected.emit("ORDER_REJECT_OBSTRUCTION")
+		return
 	var burn := int(order.get("burn", FlightMath.Burn.STANDARD))
 	# Fuel must bite: refuse a route (summed over its legs) the tank can't complete.
 	var cost := FlightMath.rm_cost(_route_length(order), burn)
@@ -141,6 +144,17 @@ func _engage() -> void:
 	_set_state(FlightCore.State.ENGAGING)
 	_acknowledge("VOICE_SHIP_COURSE_LAID_IN")
 	_notify_context()
+
+
+## Clear the plotted course entirely (ADR 0028). Only when not under way — under
+## way the captain uses Belay / All Stop. No-op (quietly) if already clear/flying.
+func _clear_course() -> void:
+	if _is_under_way():
+		return
+	if _has_course():
+		GameState.ship.current_order = {}
+		_set_state(FlightCore.State.IDLE)
+		_notify_context()
 
 
 ## All Stop: halt under way and drop the course, drifting in open space.

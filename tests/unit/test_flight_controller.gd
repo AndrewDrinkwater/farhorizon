@@ -244,20 +244,31 @@ func test_flies_a_route_through_a_waypoint() -> void:
 	assert_eq(GameState.ship.current_order, {}, "route consumed on arrival")
 
 
-func test_course_through_a_nogo_is_rejected_then_reroutes() -> void:
+func test_course_through_a_nogo_lays_in_but_engage_is_blocked() -> void:
 	GameState.system.system_id = "calder"  # has the corona no-go at the origin
 	GameState.ship.position = Vector2(1000.0, 0.0)
 	GameState.ship.reaction_mass = 100.0
-	watch_signals(EventBus)
-	# Direct leg across the star crosses the corona → rejected.
+	# Direct leg across the star crosses the corona — it still LAYS IN now (ADR 0028).
 	EventBus.order_issued.emit({"type": "set_course", "target_id": "", "point": Vector2(-1000.0, 0.0),
 		"burn": FlightMath.Burn.STANDARD})
-	assert_signal_emitted(EventBus, "order_rejected", "no-go crossing rejected")
-	assert_eq(GameState.ship.current_order, {}, "no course stored")
-	# Routing around via a waypoint clears every leg → accepted.
+	assert_eq(GameState.ship.current_order.get("type"), "course", "course laid in (drawn red, not blocked)")
+	# But Engage is refused while a leg crosses the no-go.
+	watch_signals(EventBus)
+	EventBus.order_issued.emit({"type": "engage"})
+	assert_signal_emitted(EventBus, "order_rejected", "engage blocked by the no-go")
+	assert_false(bool(GameState.ship.current_order.get("engaged", false)), "did not depart")
+	# Re-laying with a waypoint around the corona clears every leg → engage departs.
 	EventBus.order_issued.emit({"type": "set_course", "target_id": "", "point": Vector2(-1000.0, 0.0),
 		"waypoints": [Vector2(0.0, 3000.0)], "burn": FlightMath.Burn.STANDARD})
-	assert_eq(GameState.ship.current_order.get("type"), "course", "rerouted course stored")
+	EventBus.order_issued.emit({"type": "engage"})
+	assert_true(bool(GameState.ship.current_order.get("engaged", false)), "departs once routed clear")
+
+
+func test_clear_course_drops_a_laid_in_course_when_idle() -> void:
+	EventBus.order_issued.emit({"type": "set_course", "target_id": "verdant", "burn": FlightMath.Burn.STANDARD})
+	assert_eq(GameState.ship.current_order.get("type"), "course", "laid in")
+	EventBus.order_issued.emit({"type": "clear_course"})
+	assert_eq(GameState.ship.current_order, {}, "Clear Course removes the plotted course")
 
 
 func test_resync_after_load_resumes_transit() -> void:
