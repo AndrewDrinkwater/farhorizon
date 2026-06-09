@@ -4,6 +4,31 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-09 — Build: direct course plotting + drag-to-route (ADR 0028)
+
+Reworked course plotting per captain feedback (ADR 0028, supersedes the
+empty-click/Lay-In-reject bits of ADR 0020/0027). **166 GUT tests green; boots clean.**
+
+- **Plot on select:** selecting a target plots a direct course immediately; Lay In
+  + Engage stay (both re-issue from the live plot, so what flies is the plot).
+- **No-go paints red, blocks Engage (not Lay In):** the course colours by
+  `Zones.route_block` — red (no-go) / amber (hazard) / accent (clear).
+  `_set_course` no longer rejects; `_engage` does (and `Travel.available` moves
+  `route_nogo` from `lay_in` → `engage`).
+- **Grab & drag:** pressing the plotted line inserts a waypoint on the nearest leg
+  and drags it; pressing a handle drags it; release commits. The view maps
+  screen↔real (orrery inverse projection + zoom/pan; scope true-scale) and pushes
+  waypoints via `nav_waypoints_set`; the Helm adopts + re-emits. Idle-only, with a
+  stuck-drag guard. Empty-click still plots a direct free-point course (ADR 0020).
+- **Clear Course** wipes the plot entirely (selection + waypoints + a not-engaged
+  laid-in order, via a new `clear_course` order).
+- Views render the editable compose plot when idle (fat grabbable handles), the
+  engaged `current_order` path when under way.
+
+ADR 0028 recorded. Feel pass (drag feel, grab radius, red/amber legibility) by F5.
+
+---
+
 ## 2026-06-09 — Build: Zones + course obstacle routing (ADR 0026/0027)
 
 Built the Zones slice in order, tests green at each step. **164 GUT tests green;

@@ -19,7 +19,7 @@ a mission clock. Being rebuilt deliberately from scratch; α0.1 = "The Ship Flie
 - `docs/zones.md` — authored spatial regions (hazards/fields/no-go/triggers) +
   course obstacle routing: data shape, pure-core contracts, example content
   (ADR 0026/0027; **built**).
-- `docs/adr/0001..0027` — one decision per file. **If you change a decision,
+- `docs/adr/0001..0028` — one decision per file. **If you change a decision,
   add/supersede an ADR.**
 - `DEVLOG.md` — append a short entry per work session (newest on top).
 
@@ -131,6 +131,13 @@ localization/  strings.csv
   no-go reject / hazard warn, Helm waypoint compose + route preview. Five example
   zones authored into Calder. Effects beyond `blocks_course`/triggers are
   authored-but-inert until their systems land. **164 tests green; boots clean.**
+- **Direct course plotting + drag-to-route — built** (ADR 0028, supersedes the
+  empty-click/Lay-In-reject bits of 0020/0027). Selecting a target plots a direct
+  course (Lay In + Engage retained, both re-issue from the live plot); a no-go
+  paints the course **red** and blocks **Engage** (not Lay In); the captain
+  **grabs the course line to insert/drag waypoints** around obstacles
+  (`nav_waypoints_set`); **Clear Course** (`clear_course` order) wipes the plot.
+  **166 tests green; boots clean.**
 - **Next:** in-engine feel pass vs Calder (orrery density, moon insets, isochrones,
   sensor sweep, zone outlines/labels, route legibility) + the standing α0.3 tuning;
   then scope the next slice (station-
