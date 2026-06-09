@@ -28,6 +28,11 @@ signal nav_burn_changed(burn: int)
 signal nav_point_selected(point: Vector2)
 ## Orrery scale mode flipped on the Helm (ADR 0021) — OrreryParams.ScaleMode.
 signal nav_scale_changed(mode: int)
+## Active nav view switched (orrery ↔ tactical scope) — the Helm's mode toggle
+## retargets (orrery: scale; scope: ring mode).
+signal nav_view_changed(tactical: bool)
+## Tactical scope ring mode flipped — TacticalView.RingMode (ETA ↔ distance).
+signal nav_ring_mode_changed(mode: int)
 ## A moon-bearing planet was focused / the focus inset closed (ADR 0022).
 signal nav_focus_requested(body_id: String)
 signal nav_focus_closed()

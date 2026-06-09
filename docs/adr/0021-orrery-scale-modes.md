@@ -39,6 +39,13 @@ carries a text label, so the mode isn't signalled by colour alone (ADR 0012).
 `GameState` (ADR 0008): ephemeral, defaults to `LOG` each session. Persisting it
 via `ConfigManager` is a later nicety.
 
+**Amended 2026-06-09 — context-aware toggle.** The scope (ADR 0017) is always
+true-scale, so the Schematic/True-scale switch is inert there. The one Helm toggle
+is now retargeted by the active view (`EventBus.nav_view_changed`): in the orrery
+it flips scale (this ADR); in the tactical scope it flips the concentric **ring
+mode** between **ETA** (isochrones, burn-aware — ADR 0019) and **flat distance**
+(range rings in AU), via `nav_ring_mode_changed` → `TacticalView.RingMode`.
+
 ## Why
 One mode flag on the pure params keeps a single projection contract and a single
 renderer; the captain gets the real layout on demand without losing the schematic

@@ -4,6 +4,26 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-09 — Build: course RM-over-route, plotted/laid-in colour, context toggle
+
+Three nav refinements from in-engine feedback. **170 GUT tests green; boots clean.**
+
+- **Route-aware RM/ETA:** the Helm readouts + Target Info summed only the direct
+  ship→target leg (ignoring waypoints) while Engage fuel-gated on the full route —
+  so dragging a detour didn't move the cost yet "insufficient RM" fired with no
+  figure shown. Now over the whole route (`_plotted_distance`), with the ⚠ when it
+  exceeds the tank.
+- **Plotted vs laid-in colour:** a merely-plotted course draws dim (accent @ 0.5);
+  once laid in (current_order set) it's solid accent — obstruction red/amber still
+  override. (ADR 0028)
+- **Context toggle (ADR 0021 amended):** the Schematic/True-scale switch is inert
+  in the scope (always true-scale), so the one Helm toggle is retargeted by the
+  active view (`nav_view_changed`): orrery → scale; scope → ring mode, swapping the
+  concentric rings between **ETA** isochrones and **flat distance** (AU range
+  rings). New `nav_view_changed` / `nav_ring_mode_changed`; `TacticalView.RingMode`.
+
+---
+
 ## 2026-06-09 — Build: direct course plotting + drag-to-route (ADR 0028)
 
 Reworked course plotting per captain feedback (ADR 0028, supersedes the

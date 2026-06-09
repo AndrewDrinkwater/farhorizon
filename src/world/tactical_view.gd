@@ -29,6 +29,12 @@ const ISOCHRONE_RING_COLOR := Color(Palette.STATUS_NOMINAL, 0.30)
 ## the near ones show, at a slow burn more do. Tuning (step-10 feel pass).
 const ISOCHRONE_TICKS: Array[int] = [10, 20, 30, 60, 120]
 
+## Range-ring radii in AU for the flat-distance mode (ADR 0021 toggle reuse).
+const DISTANCE_RING_AU: Array[float] = [1.0, 2.0, 3.0, 5.0, 10.0, 20.0]
+
+## What the concentric rings mean: ETA (isochrones, burn-aware) or flat distance.
+enum RingMode { ISOCHRONE, DISTANCE }
+
 var _system: SystemData
 var _selected_id: String = ""
 var _selected_point: Vector2 = Vector2.ZERO
@@ -39,6 +45,7 @@ var _drag_wps: PackedVector2Array = PackedVector2Array()
 var _center: Vector2
 var _px_per_wu: float = 0.1
 var _burn: int = FlightMath.Burn.STANDARD  # mirrors the Helm burn selector (ADR 0019)
+var _ring_mode: int = RingMode.ISOCHRONE   # ETA rings ↔ distance rings (Helm toggle)
 var _max_ring_px: float = 0.0
 var _font: Font
 
@@ -50,6 +57,7 @@ func build(system: SystemData) -> void:
 	EventBus.nav_burn_changed.connect(func(burn: int) -> void: _burn = burn)
 	EventBus.system_changed.connect(_on_system_changed)
 	EventBus.nav_route_changed.connect(func(route: PackedVector2Array) -> void: _preview_route = route)
+	EventBus.nav_ring_mode_changed.connect(func(mode: int) -> void: _ring_mode = mode)
 	_init_system(system)
 
 
@@ -107,7 +115,10 @@ func _draw() -> void:
 	draw_arc(_center, radius * 0.5, 0.0, TAU, 80, Color(RING_COLOR, 0.18), 1.0, true)
 
 	_draw_zones()  # beneath bodies/contacts (ADR 0026); true shapes at this scale
-	_draw_isochrones()
+	if _ring_mode == RingMode.DISTANCE:
+		_draw_distance_rings()
+	else:
+		_draw_isochrones()
 	if _under_way():
 		_draw_course()
 	else:
@@ -223,6 +234,22 @@ func _draw_isochrones() -> void:
 		# Label up-and-right along the ring (consistent bearing, off the body field).
 		var at := _center + Vector2(0.7071, -0.7071) * ring_px
 		_label(at + Vector2(2.0, -2.0), _format_duration(ticks), TIME_COLOR)
+
+
+## Flat range rings (the Helm toggle's tactical use): concentric circles at fixed
+## real distances (AU), each labelled — "how far", not "how long" (not burn-aware).
+func _draw_distance_rings() -> void:
+	for au: float in DISTANCE_RING_AU:
+		var ring_px := au * Travel.WU_PER_AU * _px_per_wu
+		if ring_px < 6.0 or ring_px > _max_ring_px:
+			continue
+		draw_arc(_center, ring_px, 0.0, TAU, 96, RING_COLOR, 1.0, true)
+		var at := _center + Vector2(0.7071, -0.7071) * ring_px
+		_label(at + Vector2(2.0, -2.0), tr("NAV_DISTANCE_AU").format({"au": _format_au(au)}), Palette.TEXT_DIM)
+
+
+func _format_au(au: float) -> String:
+	return "%.0f" % au if au == floorf(au) else "%.1f" % au
 
 
 func _draw_course() -> void:

@@ -77,6 +77,20 @@ func test_plotted_distance_includes_dragged_waypoints() -> void:
 	assert_gt(_helm._plotted_distance(), 2000.0, "RM/ETA distance includes the waypoint detour")
 
 
+func test_mode_toggle_drives_scale_in_orrery_view() -> void:
+	watch_signals(EventBus)
+	_helm._on_scale_toggled(true)
+	assert_signal_emitted(EventBus, "nav_scale_changed", "orrery view → toggle drives scale")
+
+
+func test_mode_toggle_drives_rings_in_tactical_view() -> void:
+	EventBus.nav_view_changed.emit(true)  # switch the active view to the scope
+	watch_signals(EventBus)
+	_helm._on_scale_toggled(true)
+	assert_signal_emitted(EventBus, "nav_ring_mode_changed", "scope view → toggle drives rings")
+	assert_signal_not_emitted(EventBus, "nav_scale_changed", "and not the orrery scale")
+
+
 func test_arrival_clears_the_plot() -> void:
 	EventBus.nav_target_selected.emit("verdant")
 	assert_ne(_helm._sel_kind, Travel.TargetKind.NONE, "a course is plotted")

@@ -41,6 +41,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_tactical") and _orrery != null and _tactical != null:
 		_orrery.visible = not _orrery.visible
 		_tactical.visible = not _tactical.visible
+		EventBus.nav_view_changed.emit(_tactical.visible)  # retarget the Helm mode toggle
 
 
 ## Pick a starting system if none is loaded yet (fresh run). A loaded save will

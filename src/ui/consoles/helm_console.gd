@@ -20,6 +20,8 @@ var _sel_point: Vector2 = Vector2.ZERO
 var _route_waypoints: Array[Vector2] = []  # intermediate route points (ADR 0027)
 var _burn: int = FlightMath.Burn.STANDARD
 var _scale: int = OrreryParams.ScaleMode.LOG  # orrery schematic ↔ true scale (ADR 0021)
+var _ring_mode: int = TacticalView.RingMode.ISOCHRONE  # scope ETA ↔ distance rings
+var _tactical_active: bool = false  # which nav view the mode toggle targets
 var _flight_state: int = FlightCore.State.IDLE
 
 # Course Order widgets
@@ -28,7 +30,8 @@ var _distance_readout: TReadout
 var _eta_readout: TReadout
 var _rm_readout: TReadout
 var _burn_buttons: Dictionary = {}  # burn:int -> TButton
-var _scale_switch: CheckButton  # orrery scale toggle, above the Course Order box (ADR 0021/0023)
+var _scale_switch: CheckButton  # context toggle above the Course Order box (orrery scale / scope rings)
+var _scale_caption: Label
 var _pip_readout: TReadout      # between-pip distance/time legend (ADR 0019)
 var _action_buttons: Dictionary = {}  # order id:String -> TButton
 
@@ -68,6 +71,7 @@ func _ready() -> void:
 	_refresh_all()
 	EventBus.nav_burn_changed.emit(_burn)  # sync the nav views to the starting burn (ADR 0019)
 	EventBus.nav_scale_changed.emit(_scale)  # sync the orrery to the starting scale (ADR 0021)
+	EventBus.nav_ring_mode_changed.emit(_ring_mode)  # sync the scope's ring mode
 
 
 # --- Layout helpers ---
@@ -154,15 +158,13 @@ func _build_scale_toggle() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	box.add_child(row)
-	var caption := Label.new()
-	caption.text = tr("HELM_SCALE_LABEL")
-	caption.add_theme_color_override("font_color", Palette.TEXT_DIM)
-	row.add_child(caption)
+	_scale_caption = Label.new()
+	_scale_caption.add_theme_color_override("font_color", Palette.TEXT_DIM)
+	row.add_child(_scale_caption)
 	_scale_switch = CheckButton.new()
-	_scale_switch.set_pressed_no_signal(_scale == OrreryParams.ScaleMode.LINEAR)
-	_scale_switch.text = _scale_mode_label()
 	_scale_switch.toggled.connect(_on_scale_toggled)
 	row.add_child(_scale_switch)
+	_refresh_toggle()
 
 
 func _make_action(id: String, label_key: String, on_press: Callable) -> TButton:
@@ -231,6 +233,7 @@ func _connect_bus() -> void:
 	EventBus.contact_promoted.connect(_on_contacts_changed.unbind(2))
 	EventBus.flight_state_changed.connect(_on_flight_state_changed)
 	EventBus.course_completed.connect(_on_course_completed)
+	EventBus.nav_view_changed.connect(_on_view_changed)
 	EventBus.ship_context_changed.connect(_refresh_all)
 	EventBus.sim_tick.connect(_on_tick.unbind(1))
 	EventBus.fuel_changed.connect(_on_fuel_changed)
@@ -364,20 +367,46 @@ func _select_burn(burn: int) -> void:
 	EventBus.nav_burn_changed.emit(_burn)  # nav views recompute time annotations (ADR 0019)
 
 
+## The mode toggle drives the orrery scale, or — when the tactical scope is the
+## active view — the scope's ring mode (ETA ↔ distance). Same switch, retargeted.
+func _on_scale_toggled(pressed: bool) -> void:
+	if _tactical_active:
+		_select_ring_mode(TacticalView.RingMode.DISTANCE if pressed else TacticalView.RingMode.ISOCHRONE)
+	else:
+		_select_scale(OrreryParams.ScaleMode.LINEAR if pressed else OrreryParams.ScaleMode.LOG)
+
+
 func _select_scale(mode: int) -> void:
 	_scale = mode
-	if _scale_switch != null:
-		_scale_switch.set_pressed_no_signal(_scale == OrreryParams.ScaleMode.LINEAR)
-		_scale_switch.text = _scale_mode_label()
+	_refresh_toggle()
 	EventBus.nav_scale_changed.emit(_scale)  # orrery remaps radii (ADR 0021)
 
 
-func _on_scale_toggled(pressed: bool) -> void:
-	_select_scale(OrreryParams.ScaleMode.LINEAR if pressed else OrreryParams.ScaleMode.LOG)
+func _select_ring_mode(mode: int) -> void:
+	_ring_mode = mode
+	_refresh_toggle()
+	EventBus.nav_ring_mode_changed.emit(_ring_mode)  # scope swaps ETA ↔ distance rings
 
 
-func _scale_mode_label() -> String:
-	return tr("HELM_SCALE_TRUE") if _scale == OrreryParams.ScaleMode.LINEAR else tr("HELM_SCALE_SCHEMATIC")
+func _on_view_changed(tactical: bool) -> void:
+	_tactical_active = tactical
+	_refresh_toggle()
+
+
+## Point the one toggle at the active view's mode: orrery scale, or scope rings.
+func _refresh_toggle() -> void:
+	if _scale_switch == null:
+		return
+	if _tactical_active:
+		_scale_caption.text = tr("HELM_RINGS_LABEL")
+		_scale_switch.set_pressed_no_signal(_ring_mode == TacticalView.RingMode.DISTANCE)
+		_scale_switch.text = tr("HELM_RINGS_DIST") if _ring_mode == TacticalView.RingMode.DISTANCE \
+			else tr("HELM_RINGS_ETA")
+	else:
+		_scale_caption.text = tr("HELM_SCALE_LABEL")
+		_scale_switch.set_pressed_no_signal(_scale == OrreryParams.ScaleMode.LINEAR)
+		_scale_switch.text = tr("HELM_SCALE_TRUE") if _scale == OrreryParams.ScaleMode.LINEAR \
+			else tr("HELM_SCALE_SCHEMATIC")
 
 
 func _lay_in_course() -> void:
