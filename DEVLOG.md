@@ -4,6 +4,38 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-09 — Build: Zones + course obstacle routing (ADR 0026/0027)
+
+Built the Zones slice in order, tests green at each step. **164 GUT tests green;
+boots clean.**
+
+1. **ZoneData + content (ADR 0026):** authored `.tres` (by id) — geometry
+   (CIRCLE/BAND/POLYGON, body-anchorable) + category + a generic `effects` tag bag.
+   `SystemData.zones`. Authored the five Calder example zones (one of each
+   shape/category) + `ZONE_*` strings.
+2. **`Zones.contains` (pure):** per-shape membership in real space; GUT-tested
+   (boundaries, zero-radius, band hole, degenerate polygon).
+3. **`ZoneController`:** ticks on sim_tick (mirrors SensorController) — resolves
+   anchored geometry, diffs membership → `zone_entered`/`zone_exited`; on-enter
+   `trigger_event` fires `zone_trigger_fired` (once if `once`, recorded in
+   `GameState.zones`, saved); reset on new_game/load/system_changed. Other effects
+   authored-but-inert (the design-for-defer hook).
+4. **Rendering:** zones draw beneath bodies — true shapes on the scope, warped on
+   the orrery (boundary samples / polygon verts through the projection); outline +
+   name·category label (shape + label, not colour alone). Anchor resolution moved
+   into pure `Zones` and reused by the controller.
+5. **Course obstacle routing (ADR 0027):** pure `Zones.segment_intersects` +
+   `route_block` (nogo > hazard > clear). `current_order.waypoints`;
+   `FlightController` flies the legs in order (fuel sums over legs); a no-go on any
+   leg rejects Lay In (`ORDER_REJECT_OBSTRUCTION`), hazards warn. Helm: empty-click
+   waypoints (with a body/contact target), Clear Route, a Target Info Route line,
+   and a dim compose preview (`nav_route_changed`); both views render the engaged
+   route through its waypoints.
+6. **Feel pass:** in-engine vs Calder (zone outlines/labels, route legibility,
+   no-go reject / hazard warn) is by F5. ADRs 0026 + 0027 confirmed.
+
+---
+
 ## 2026-06-09 — Design: Zones + course obstacle routing (ADR 0026/0027)
 
 Design session (no code). New primitive: **Zones** — authored spatial regions for

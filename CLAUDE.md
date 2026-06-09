@@ -18,7 +18,7 @@ a mission clock. Being rebuilt deliberately from scratch; α0.1 = "The Ship Flie
   `core` function contracts and test outlines (planned for α0.2).
 - `docs/zones.md` — authored spatial regions (hazards/fields/no-go/triggers) +
   course obstacle routing: data shape, pure-core contracts, example content
-  (ADR 0026/0027; designed, not built).
+  (ADR 0026/0027; **built**).
 - `docs/adr/0001..0027` — one decision per file. **If you change a decision,
   add/supersede an ADR.**
 - `DEVLOG.md` — append a short entry per work session (newest on top).
@@ -123,8 +123,17 @@ localization/  strings.csv
   `refuel`, `tp …`); **Calder Reach**, a dense 2nd system (`system calder`); and the
   Helm **Target Information panel** (ADR 0025, replaced the Order Log; acks now a
   transient Flight Status line). **144 tests green; boots clean.**
+- **Zones + course routing — built** (ADR 0026/0027). `ZoneData` (geometry +
+  effect-tag bag) in `SystemData.zones`; pure `Zones` (`contains` /
+  `segment_intersects` / `route_block`); `ZoneController` (membership +
+  `zone_entered/exited`, one-shot `zone_trigger_fired` saved in `GameState.zones`);
+  zones rendered on both nav views; `current_order.waypoints` multi-leg routes with
+  no-go reject / hazard warn, Helm waypoint compose + route preview. Five example
+  zones authored into Calder. Effects beyond `blocks_course`/triggers are
+  authored-but-inert until their systems land. **164 tests green; boots clean.**
 - **Next:** in-engine feel pass vs Calder (orrery density, moon insets, isochrones,
-  sensor sweep) + the standing α0.3 tuning; then scope the next slice (station-
+  sensor sweep, zone outlines/labels, route legibility) + the standing α0.3 tuning;
+  then scope the next slice (station-
   keeping hold, survey rung, or a second console) — write the spec before building.
 
 ## Workflow expectations
