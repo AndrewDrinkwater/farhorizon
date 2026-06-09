@@ -31,6 +31,9 @@ signal nav_scale_changed(mode: int)
 ## A moon-bearing planet was focused / the focus inset closed (ADR 0022).
 signal nav_focus_requested(body_id: String)
 signal nav_focus_closed()
+## The compose-time route changed (ADR 0027) — ship → waypoints → destination; the
+## nav views draw it as a pending-route preview. Empty = nothing to preview.
+signal nav_route_changed(route: PackedVector2Array)
 
 # --- Flight (ADR 0005) ---
 signal flight_state_changed(state: int)

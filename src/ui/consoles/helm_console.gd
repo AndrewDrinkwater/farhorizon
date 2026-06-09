@@ -17,6 +17,7 @@ const POST: String = "helm"
 var _sel_kind: int = Travel.TargetKind.NONE
 var _sel_id: String = ""
 var _sel_point: Vector2 = Vector2.ZERO
+var _route_waypoints: Array[Vector2] = []  # intermediate route points (ADR 0027)
 var _burn: int = FlightMath.Burn.STANDARD
 var _scale: int = OrreryParams.ScaleMode.LOG  # orrery schematic ↔ true scale (ADR 0021)
 var _flight_state: int = FlightCore.State.IDLE
@@ -46,6 +47,7 @@ var _ti_dist: TReadout
 var _ti_eta: TReadout
 var _ti_rm: TReadout
 var _ti_status: TReadout
+var _ti_route: TReadout
 
 
 func _ready() -> void:
@@ -138,6 +140,7 @@ func _build_course_order() -> void:
 	row2.add_child(_make_action("undock", "HELM_UNDOCK", _undock))
 	row2.add_child(_make_action("scan", "HELM_SCAN", _scan))
 	row2.add_child(_make_action("focus", "HELM_FOCUS", _focus))
+	row2.add_child(_make_action("clear_route", "HELM_CLEAR_ROUTE", _clear_route))
 
 	_refresh_burn_buttons()
 
@@ -213,6 +216,8 @@ func _build_target_info() -> void:
 	c.add_child(_ti_rm)
 	_ti_status = TReadout.new("HELM_TI_STATUS")
 	c.add_child(_ti_status)
+	_ti_route = TReadout.new("HELM_TI_ROUTE")
+	c.add_child(_ti_route)
 
 
 # --- Bus wiring ---
@@ -238,12 +243,15 @@ func _on_system_changed(_system_id: String) -> void:
 	_sel_kind = Travel.TargetKind.NONE
 	_sel_id = ""
 	_sel_point = Vector2.ZERO
+	_route_waypoints.clear()
 	_refresh_all()
+	_emit_route()
 
 
 func _on_target_selected(target_id: String) -> void:
 	_sel_id = target_id
 	_sel_point = Vector2.ZERO
+	_route_waypoints.clear()  # fresh route to the new target (ADR 0027)
 	if _resolve_body(target_id) != null:
 		_sel_kind = Travel.TargetKind.BODY
 	elif _resolve_contact(target_id) != null:
@@ -252,14 +260,29 @@ func _on_target_selected(target_id: String) -> void:
 		_sel_kind = Travel.TargetKind.NONE
 	_refresh_preview()
 	_refresh_actions()
+	_emit_route()
 
 
+## An empty-space click (ADR 0020/0027): with a body/contact target it adds a route
+## waypoint to plot around obstacles; otherwise it sets a free-point destination.
 func _on_point_selected(point: Vector2) -> void:
-	_sel_kind = Travel.TargetKind.POINT
-	_sel_id = ""
-	_sel_point = point
+	if _sel_kind == Travel.TargetKind.BODY or _sel_kind == Travel.TargetKind.CONTACT:
+		_route_waypoints.append(point)
+	else:
+		_sel_kind = Travel.TargetKind.POINT
+		_sel_id = ""
+		_sel_point = point
+		_route_waypoints.clear()
 	_refresh_preview()
 	_refresh_actions()
+	_emit_route()
+
+
+func _clear_route() -> void:
+	_route_waypoints.clear()
+	_refresh_preview()
+	_refresh_actions()
+	_emit_route()
 
 
 ## A contact winked in/out or was identified — the preview name + Scan
@@ -337,8 +360,32 @@ func _lay_in_course() -> void:
 	if _sel_kind == Travel.TargetKind.NONE:
 		return
 	EventBus.order_issued.emit({
-		"type": "set_course", "target_id": _sel_id, "point": _sel_point, "burn": _burn,
+		"type": "set_course", "target_id": _sel_id, "point": _sel_point,
+		"waypoints": _route_waypoints.duplicate(), "burn": _burn,
 	})
+
+
+## The composed route as points: ship → waypoints → destination (empty if nothing
+## selected). Used for the no-go check, the Target Info line, and the preview.
+func _compose_route() -> PackedVector2Array:
+	if _sel_kind == Travel.TargetKind.NONE:
+		return PackedVector2Array()
+	var route := PackedVector2Array([GameState.ship.position])
+	for wp: Vector2 in _route_waypoints:
+		route.append(wp)
+	route.append(_selected_position())
+	return route
+
+
+func _route_block_level() -> int:
+	var system := TypeRegistry.get_system(GameState.system.system_id)
+	if system == null or _sel_kind == Travel.TargetKind.NONE:
+		return Zones.Block.CLEAR
+	return Zones.route_block(system, _compose_route())
+
+
+func _emit_route() -> void:
+	EventBus.nav_route_changed.emit(_compose_route())
 
 
 func _scan() -> void:
@@ -408,6 +455,8 @@ func _refresh_actions() -> void:
 	# Focus is a view request, not a travel order — gate it on "selection has moons".
 	if _action_buttons.has("focus"):
 		_action_buttons["focus"].disabled = not _selection_has_moons()
+	if _action_buttons.has("clear_route"):
+		_action_buttons["clear_route"].disabled = _route_waypoints.is_empty()
 
 
 ## Does the current selection (a body) have any moons? (ADR 0022)
@@ -441,6 +490,7 @@ func _context() -> Dictionary:
 		"nav_target_in_range": contact != null \
 			and ship.position.distance_to(contact.position) <= ship.sensor_range,
 		"nav_target_tier": GameState.contacts.tier_of(_sel_id) if is_contact else Sensors.Tier.UNDETECTED,
+		"route_nogo": _route_block_level() == Zones.Block.NOGO,
 	}
 
 
@@ -562,6 +612,25 @@ func _refresh_target_info() -> void:
 			_ti_point()
 		_:
 			_ti_none()
+	_refresh_route_line()
+
+
+## Route obstruction + waypoint count (ADR 0027). Clear / hazard-warned / no-go.
+func _refresh_route_line() -> void:
+	if _sel_kind == Travel.TargetKind.NONE:
+		_ti_route.set_value("—")
+		return
+	var status: String
+	match _route_block_level():
+		Zones.Block.NOGO:
+			status = "⚠ " + tr("HELM_TI_ROUTE_NOGO")
+		Zones.Block.HAZARD:
+			status = "⚠ " + tr("HELM_TI_ROUTE_HAZARD")
+		_:
+			status = tr("HELM_TI_ROUTE_CLEAR")
+	if not _route_waypoints.is_empty():
+		status += " · " + tr("HELM_TI_ROUTE_WP").format({"n": _route_waypoints.size()})
+	_ti_route.set_value(status)
 
 
 func _ti_body() -> void:

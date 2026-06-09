@@ -139,11 +139,18 @@ HELM_KIND_ANOMALY,Anomaly
 HELM_KIND_SIGNAL,Signal
 HELM_KIND_PROBE,Probe
 HELM_KIND_DEBRIS,Debris
+HELM_CLEAR_ROUTE,Clear Route
+HELM_TI_ROUTE,Route
+HELM_TI_ROUTE_CLEAR,clear
+HELM_TI_ROUTE_HAZARD,hazard on route
+HELM_TI_ROUTE_NOGO,obstruction (no-go)
+HELM_TI_ROUTE_WP,{n} wp
 NAV_WAYPOINT,Waypoint
 NAV_CONTACT_UNKNOWN,Unknown contact
 VOICE_SHIP_SCAN_COMPLETE,Scan complete. Contact identified.
 ORDER_REJECT_OUT_OF_RANGE,Unable — target out of sensor range.
 ORDER_REJECT_ALREADY_SCANNED,Unable — already identified.
+ORDER_REJECT_OBSTRUCTION,Unable — obstruction in path.
 TRAVEL_DEEP_SPACE,Deep Space
 TRAVEL_HOLDING,Holding
 TRAVEL_DOCKED,Docked

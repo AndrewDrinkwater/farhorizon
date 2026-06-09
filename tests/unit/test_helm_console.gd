@@ -58,6 +58,17 @@ func test_acknowledgment_shows_a_transient_line() -> void:
 	assert_almost_eq(_helm._ack_line.modulate.a, 1.0, 0.01, "shown at full opacity before fading")
 
 
+func test_waypoints_compose_into_the_route_order() -> void:
+	watch_signals(EventBus)
+	EventBus.nav_target_selected.emit("verdant")
+	EventBus.nav_point_selected.emit(Vector2(0.0, 500.0))  # with a target, this adds a waypoint
+	EventBus.nav_point_selected.emit(Vector2(500.0, 500.0))
+	_helm._lay_in_course()
+	var order: Dictionary = get_signal_parameters(EventBus, "order_issued", 0)[0]
+	assert_eq(order.get("target_id"), "verdant", "still bound for the body")
+	assert_eq(order.get("waypoints").size(), 2, "both waypoints composed into the route")
+
+
 func test_target_info_reflects_a_selected_body() -> void:
 	EventBus.nav_target_selected.emit("verdant")
 	assert_eq(_helm._ti_name._value.text, tr("BODY_VERDANT"), "target info names the body")

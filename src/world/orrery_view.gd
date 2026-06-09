@@ -37,6 +37,7 @@ var _moons_by_parent: Dictionary = {}  # parent id -> Array[BodyData] (ADR 0022)
 var _selected_id: String = ""
 var _selected_point: Vector2 = Vector2.ZERO
 var _has_point_sel: bool = false  # a free-space waypoint is selected (ADR 0020)
+var _preview_route: PackedVector2Array = PackedVector2Array()  # compose-time route (ADR 0027)
 var _burn: int = FlightMath.Burn.STANDARD  # mirrors the Helm burn selector (ADR 0019)
 var _scale_mode: int = OrreryParams.ScaleMode.LOG  # schematic ↔ true scale (ADR 0021)
 var _zoom: float = 1.0          # wheel zoom about the cursor (ADR 0023)
@@ -56,7 +57,12 @@ func build(system: SystemData) -> void:
 	EventBus.contact_lost.connect(_on_contacts_changed.unbind(1))
 	EventBus.contact_promoted.connect(_on_contacts_changed.unbind(2))
 	EventBus.system_changed.connect(_on_system_changed)
+	EventBus.nav_route_changed.connect(_on_route_changed)
 	_init_system(system)
+
+
+func _on_route_changed(route: PackedVector2Array) -> void:
+	_preview_route = route
 
 
 func _on_system_changed(system_id: String) -> void:
@@ -180,6 +186,7 @@ func _draw() -> void:
 	var proj := _project_bodies()
 	_draw_zones()  # beneath bodies/contacts (ADR 0026); warped through the projection
 	_draw_rings(proj)
+	_draw_preview_route()
 	_draw_course()
 	for body: BodyData in _system.bodies:
 		_draw_body(body, proj[body.id])
@@ -326,19 +333,47 @@ func _draw_course() -> void:
 	var order: Dictionary = GameState.ship.current_order
 	if String(order.get("type", "")) != "course":
 		return
-	var dest := _course_dest(order)
-	var ship_pos := GameState.ship.position
-	# The course is a straight real path, but the log-radial projection bends it —
-	# and the bend is sharpest where the path passes near the star (small radius,
-	# fast bearing sweep). Uniform sampling under-resolves that and the chords
-	# kink ("zig-zag"); subdivide adaptively so only the curved part gets points.
-	var pts := PackedVector2Array([_project_course_point(ship_pos)])
-	_subdivide_course(ship_pos, dest, 0.0, 1.0, 0, pts)
-	draw_polyline(pts, Palette.ACCENT, 1.5, true)
+	# The laid-in route: ship → waypoints → destination (ADR 0027). Each leg is the
+	# adaptively-subdivided curve (the log projection bends a straight real path —
+	# sharpest near the star — and uniform sampling would kink it).
+	var route := _course_route(order)
+	_draw_route_legs(route, Palette.ACCENT)
+	for i in range(route.size() - 1):
+		_draw_course_time(route[i], route[i + 1])  # time pips per leg
+	for i in range(1, route.size() - 1):
+		draw_circle(_project_course_point(route[i]), 3.0, Palette.ACCENT)  # waypoint dots
 	var target: BodyData = _by_id.get(String(order.get("target_id", "")), null)
 	var ring: float = (_marker_px(target.kind) + 5.0) if target != null else 8.0
-	draw_arc(_project_course_point(dest), ring, 0.0, TAU, 24, Palette.ACCENT, 1.0, true)
-	_draw_course_time(ship_pos, dest)
+	draw_arc(_project_course_point(route[route.size() - 1]), ring, 0.0, TAU, 24, Palette.ACCENT, 1.0, true)
+
+
+## The laid-in route as real points: ship → waypoints → destination.
+func _course_route(order: Dictionary) -> PackedVector2Array:
+	var route := PackedVector2Array([GameState.ship.position])
+	for wp: Vector2 in order.get("waypoints", []):
+		route.append(wp)
+	route.append(_course_dest(order))
+	return route
+
+
+## Draw each route leg as the projected, adaptively-flattened curve.
+func _draw_route_legs(route: PackedVector2Array, color: Color) -> void:
+	for i in range(route.size() - 1):
+		var pts := PackedVector2Array([_project_course_point(route[i])])
+		_subdivide_course(route[i], route[i + 1], 0.0, 1.0, 0, pts)
+		draw_polyline(pts, color, 1.5, true)
+
+
+## Compose-time route preview (ADR 0027): drawn dim while plotting, before a course
+## is laid in (the engaged course then draws over the same points via _draw_course).
+func _draw_preview_route() -> void:
+	if _preview_route.size() < 2:
+		return
+	if String(GameState.ship.current_order.get("type", "")) == "course":
+		return
+	_draw_route_legs(_preview_route, Color(Palette.ACCENT.r, Palette.ACCENT.g, Palette.ACCENT.b, 0.4))
+	for i in range(1, _preview_route.size() - 1):
+		draw_circle(_project_course_point(_preview_route[i]), 3.0, Color(Palette.ACCENT.r, Palette.ACCENT.g, Palette.ACCENT.b, 0.5))
 
 
 ## True while the captain is composing or flying a course (a target/point selected,

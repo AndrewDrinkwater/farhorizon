@@ -29,6 +29,7 @@ var _system: SystemData
 var _selected_id: String = ""
 var _selected_point: Vector2 = Vector2.ZERO
 var _has_point_sel: bool = false  # a free-space waypoint is selected (ADR 0020)
+var _preview_route: PackedVector2Array = PackedVector2Array()  # compose-time route (ADR 0027)
 var _center: Vector2
 var _px_per_wu: float = 0.1
 var _burn: int = FlightMath.Burn.STANDARD  # mirrors the Helm burn selector (ADR 0019)
@@ -42,6 +43,7 @@ func build(system: SystemData) -> void:
 	EventBus.nav_point_selected.connect(_on_point_selected)
 	EventBus.nav_burn_changed.connect(func(burn: int) -> void: _burn = burn)
 	EventBus.system_changed.connect(_on_system_changed)
+	EventBus.nav_route_changed.connect(func(route: PackedVector2Array) -> void: _preview_route = route)
 	_init_system(system)
 
 
@@ -100,6 +102,7 @@ func _draw() -> void:
 
 	_draw_zones()  # beneath bodies/contacts (ADR 0026); true shapes at this scale
 	_draw_isochrones()
+	_draw_preview_route()
 	_draw_course()
 	for body: BodyData in _system.bodies:
 		_draw_body(body, _to_screen(body.position))
@@ -218,11 +221,41 @@ func _draw_course() -> void:
 	var order: Dictionary = GameState.ship.current_order
 	if String(order.get("type", "")) != "course":
 		return
-	# True scale → a straight real course is a straight line to the destination
-	# (body position, or the frozen dest for a contact / free point — ADR 0020).
-	var target: BodyData = _find(String(order.get("target_id", "")))
+	# True scale → straight legs through the route's waypoints to the destination
+	# (ADR 0020/0027). Ship maps to the scope centre.
+	var route := _course_route(order)
+	var screen := PackedVector2Array()
+	for p: Vector2 in route:
+		screen.append(_to_screen(p))
+	draw_polyline(screen, Palette.ACCENT, 1.5, true)
+	for i in range(1, route.size() - 1):
+		draw_circle(_to_screen(route[i]), 3.0, Palette.ACCENT)  # waypoint dots
+
+
+## The laid-in route as real points: ship → waypoints → destination.
+func _course_route(order: Dictionary) -> PackedVector2Array:
+	var target := _find(String(order.get("target_id", "")))
 	var dest: Vector2 = target.position if target != null else order.get("dest", GameState.ship.position)
-	draw_line(_center, _to_screen(dest), Palette.ACCENT, 1.5, true)
+	var route := PackedVector2Array([GameState.ship.position])
+	for wp: Vector2 in order.get("waypoints", []):
+		route.append(wp)
+	route.append(dest)
+	return route
+
+
+## Compose-time route preview (ADR 0027), drawn dim until a course is laid in.
+func _draw_preview_route() -> void:
+	if _preview_route.size() < 2:
+		return
+	if String(GameState.ship.current_order.get("type", "")) == "course":
+		return
+	var dim := Color(Palette.ACCENT.r, Palette.ACCENT.g, Palette.ACCENT.b, 0.4)
+	var screen := PackedVector2Array()
+	for p: Vector2 in _preview_route:
+		screen.append(_to_screen(p))
+	draw_polyline(screen, dim, 1.5, true)
+	for i in range(1, _preview_route.size() - 1):
+		draw_circle(_to_screen(_preview_route[i]), 3.0, dim)
 
 
 func _draw_ship() -> void:

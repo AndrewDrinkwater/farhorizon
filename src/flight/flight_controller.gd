@@ -83,16 +83,36 @@ func _set_course(order: Dictionary) -> void:
 	if body == null and FlightCore.has_arrived(GameState.ship.position, dest):
 		EventBus.order_rejected.emit("ORDER_REJECT_ALREADY_HERE")
 		return
+	# Obstacle check (ADR 0027): a no-go crossing on any leg blocks the course; the
+	# captain routes around with waypoints. (Hazard crossings are allowed — warned
+	# at compose on the Helm.)
+	var waypoints: Array = order.get("waypoints", [])
+	if _route_blocked(waypoints, dest):
+		EventBus.order_rejected.emit("ORDER_REJECT_OBSTRUCTION")
+		return
 	GameState.ship.current_order = {
 		"type": "course",
 		"target_id": target_id,
 		"dest": dest,
+		"waypoints": waypoints.duplicate(),
 		"burn": burn,
 		"engaged": false,
 		"origin": GameState.ship.position,
 	}
 	_acknowledge("VOICE_SHIP_COURSE_LAID_IN")
 	_notify_context()
+
+
+## Does any leg of ship→waypoints→dest cross a no-go zone (ADR 0027)?
+func _route_blocked(waypoints: Array, dest: Vector2) -> bool:
+	var system := TypeRegistry.get_system(GameState.system.system_id)
+	if system == null:
+		return false
+	var route := PackedVector2Array([GameState.ship.position])
+	for wp: Vector2 in waypoints:
+		route.append(wp)
+	route.append(dest)
+	return Zones.route_block(system, route) == Zones.Block.NOGO
 
 
 func _engage() -> void:
@@ -107,8 +127,8 @@ func _engage() -> void:
 		return
 	var order: Dictionary = GameState.ship.current_order
 	var burn := int(order.get("burn", FlightMath.Burn.STANDARD))
-	# Fuel must bite: refuse a course the tank can't complete (ADR 0005).
-	var cost := FlightMath.rm_cost(GameState.ship.position.distance_to(_destination(order)), burn)
+	# Fuel must bite: refuse a route (summed over its legs) the tank can't complete.
+	var cost := FlightMath.rm_cost(_route_length(order), burn)
 	if cost > GameState.ship.reaction_mass:
 		EventBus.order_rejected.emit("ORDER_REJECT_INSUFFICIENT_RM")
 		return
@@ -217,6 +237,11 @@ func _on_sim_tick(_tick: int) -> void:
 	var order: Dictionary = GameState.ship.current_order
 	if not _is_under_way():
 		return
+	# Multi-leg route (ADR 0027): fly through remaining waypoints first, no stop.
+	var waypoints: Array = order.get("waypoints", [])
+	if not waypoints.is_empty():
+		_step_to_waypoint(order, waypoints)
+		return
 	var body := _resolve_body(String(order.get("target_id", "")))
 	if body == null:
 		_step_to_point(order)  # contact or free point — drift to rest on arrival
@@ -245,6 +270,44 @@ func _on_sim_tick(_tick: int) -> void:
 	else:
 		var origin: Vector2 = order.get("origin", new_pos)
 		_set_state(FlightCore.executing_state(origin, center, new_pos, burn))
+
+
+## Fly one tick toward the next waypoint (ADR 0027). On reaching it, pop it and
+## continue to the next leg without stopping; the final leg falls through to the
+## body/point arrival logic next tick.
+func _step_to_waypoint(order: Dictionary, waypoints: Array) -> void:
+	var wp: Vector2 = waypoints[0]
+	var burn := int(order.get("burn", FlightMath.Burn.STANDARD))
+	var prev_pos: Vector2 = GameState.ship.position
+	if FlightCore.has_arrived(prev_pos, wp):
+		waypoints.remove_at(0)  # reached — advance, no hold
+		return
+	GameState.ship.heading = (wp - prev_pos).angle()
+	var new_pos: Vector2 = FlightCore.step_position(prev_pos, wp, burn)
+	GameState.ship.position = new_pos
+	_spend_reaction_mass(FlightMath.rm_cost(prev_pos.distance_to(new_pos), burn))
+	if FlightCore.has_arrived(new_pos, wp):
+		waypoints.remove_at(0)
+	var origin: Vector2 = order.get("origin", new_pos)
+	_set_state(FlightCore.executing_state(origin, _destination(order), new_pos, burn))
+
+
+## The full route as points: ship → waypoints → final destination.
+func _route_points(order: Dictionary) -> PackedVector2Array:
+	var route := PackedVector2Array([GameState.ship.position])
+	for wp: Vector2 in order.get("waypoints", []):
+		route.append(wp)
+	route.append(_destination(order))
+	return route
+
+
+## Total route length over all legs (for fuel gating).
+func _route_length(order: Dictionary) -> float:
+	var route := _route_points(order)
+	var total := 0.0
+	for i in range(route.size() - 1):
+		total += route[i].distance_to(route[i + 1])
+	return total
 
 
 ## Fly one tick toward a contact / free point (no holding ring). On arrival the

@@ -50,6 +50,7 @@ static func location_key(location: int) -> String:
 ##   nav_target_is_contact: bool — the selection is a sensor contact
 ##   nav_target_in_range: bool   — that contact is within sensor range
 ##   nav_target_tier: int        — that contact's detection tier (Sensors.Tier)
+##   route_nogo: bool            — a no-go zone crosses the composed route (ADR 0027)
 ## Returns a bool per order id (lay_in/engage/belay/all_stop/dock/undock/scan).
 static func available(context: Dictionary) -> Dictionary:
 	var location: int = int(context.get("location", Location.DEEP_SPACE))
@@ -62,8 +63,9 @@ static func available(context: Dictionary) -> Dictionary:
 	var is_contact: bool = bool(context.get("nav_target_is_contact", false))
 	var in_range: bool = bool(context.get("nav_target_in_range", false))
 	var tier: int = int(context.get("nav_target_tier", Sensors.Tier.UNDETECTED))
+	var route_nogo: bool = bool(context.get("route_nogo", false))  # a no-go on the route (ADR 0027)
 	return {
-		"lay_in": has_selection and not nav_here and not in_transit,
+		"lay_in": has_selection and not nav_here and not in_transit and not route_nogo,
 		"engage": has_course and not in_transit and location != Location.DOCKED,
 		"belay": in_transit,
 		"all_stop": in_transit,

@@ -227,6 +227,39 @@ func test_scan_out_of_range_is_rejected() -> void:
 	assert_eq(GameState.contacts.tier_of("kepri_derelict"), Sensors.Tier.BLIP, "tier unchanged")
 
 
+func test_flies_a_route_through_a_waypoint() -> void:
+	# sol has no zones; route ZERO → (0,500) → verdant, passing the waypoint.
+	var verdant := _find("verdant")
+	GameState.ship.reaction_mass = 100.0
+	EventBus.order_issued.emit({"type": "set_course", "target_id": "verdant",
+		"waypoints": [Vector2(0.0, 500.0)], "burn": FlightMath.Burn.HARD})
+	assert_eq(GameState.ship.current_order.get("waypoints").size(), 1, "waypoint stored")
+	EventBus.order_issued.emit({"type": "engage"})
+	for i in range(3000):
+		if GameState.ship.location == Travel.Location.HOLDING:
+			break
+		EventBus.sim_tick.emit(i + 1)
+	assert_eq(GameState.ship.location, Travel.Location.HOLDING, "arrives at the final target")
+	assert_eq(GameState.ship.location_body_id, "verdant", "holding at the route's destination")
+	assert_eq(GameState.ship.current_order, {}, "route consumed on arrival")
+
+
+func test_course_through_a_nogo_is_rejected_then_reroutes() -> void:
+	GameState.system.system_id = "calder"  # has the corona no-go at the origin
+	GameState.ship.position = Vector2(1000.0, 0.0)
+	GameState.ship.reaction_mass = 100.0
+	watch_signals(EventBus)
+	# Direct leg across the star crosses the corona → rejected.
+	EventBus.order_issued.emit({"type": "set_course", "target_id": "", "point": Vector2(-1000.0, 0.0),
+		"burn": FlightMath.Burn.STANDARD})
+	assert_signal_emitted(EventBus, "order_rejected", "no-go crossing rejected")
+	assert_eq(GameState.ship.current_order, {}, "no course stored")
+	# Routing around via a waypoint clears every leg → accepted.
+	EventBus.order_issued.emit({"type": "set_course", "target_id": "", "point": Vector2(-1000.0, 0.0),
+		"waypoints": [Vector2(0.0, 3000.0)], "burn": FlightMath.Burn.STANDARD})
+	assert_eq(GameState.ship.current_order.get("type"), "course", "rerouted course stored")
+
+
 func test_resync_after_load_resumes_transit() -> void:
 	var rubicon := _find("rubicon")
 	GameState.ship.position = rubicon.position * 0.5
