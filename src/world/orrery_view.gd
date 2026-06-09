@@ -600,17 +600,20 @@ func _waypoint_handle_at(mouse: Vector2) -> int:
 	return -1
 
 
-## Route-leg index nearest the cursor (within GRAB_PX) in screen space, or -1.
+## Route-leg index nearest the cursor (within GRAB_PX), or -1. Tested against the
+## actual rendered curve (same adaptive subdivision as the draw), not the straight
+## chord — on the warped orrery a near-star leg bows far from its chord (ADR 0028).
 func _course_leg_at(mouse: Vector2) -> int:
 	var best := GRAB_PX
 	var best_leg := -1
 	for i in range(_preview_route.size() - 1):
-		var a := _project_course_point(_preview_route[i])
-		var b := _project_course_point(_preview_route[i + 1])
-		var d := mouse.distance_to(Geometry2D.get_closest_point_to_segment(mouse, a, b))
-		if d <= best:
-			best = d
-			best_leg = i
+		var pts := PackedVector2Array([_project_course_point(_preview_route[i])])
+		_subdivide_course(_preview_route[i], _preview_route[i + 1], 0.0, 1.0, 0, pts)
+		for j in range(pts.size() - 1):
+			var d := mouse.distance_to(Geometry2D.get_closest_point_to_segment(mouse, pts[j], pts[j + 1]))
+			if d <= best:
+				best = d
+				best_leg = i
 	return best_leg
 
 

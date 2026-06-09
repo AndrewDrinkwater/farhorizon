@@ -40,6 +40,8 @@ signal nav_waypoints_set(waypoints: PackedVector2Array)
 
 # --- Flight (ADR 0005) ---
 signal flight_state_changed(state: int)
+## The ship reached its destination (a course finished) — the Helm clears the plot.
+signal course_completed()
 
 # --- Travel situation (ADR 0015) — location/course changed; UI re-derives orders ---
 signal ship_context_changed()

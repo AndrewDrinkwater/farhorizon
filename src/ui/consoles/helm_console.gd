@@ -230,6 +230,7 @@ func _connect_bus() -> void:
 	EventBus.contact_lost.connect(_on_contacts_changed.unbind(1))
 	EventBus.contact_promoted.connect(_on_contacts_changed.unbind(2))
 	EventBus.flight_state_changed.connect(_on_flight_state_changed)
+	EventBus.course_completed.connect(_on_course_completed)
 	EventBus.ship_context_changed.connect(_refresh_all)
 	EventBus.sim_tick.connect(_on_tick.unbind(1))
 	EventBus.fuel_changed.connect(_on_fuel_changed)
@@ -287,11 +288,21 @@ func _on_waypoints_set(waypoints: PackedVector2Array) -> void:
 ## Clear Course (ADR 0028): wipe the plotted course entirely — selection,
 ## waypoints, and any not-engaged laid-in order.
 func _clear_route() -> void:
+	EventBus.order_issued.emit({"type": "clear_course"})
+	_reset_plot()
+
+
+## On arrival the course is done — wipe the plot so it doesn't linger (ADR 0028).
+func _on_course_completed() -> void:
+	_reset_plot()
+
+
+## Reset the compose plot (selection + waypoints) and clear the views' highlight.
+func _reset_plot() -> void:
 	_sel_kind = Travel.TargetKind.NONE
 	_sel_id = ""
 	_sel_point = Vector2.ZERO
 	_route_waypoints.clear()
-	EventBus.order_issued.emit({"type": "clear_course"})
 	EventBus.nav_target_selected.emit("")  # clear the views' selection highlight
 	_refresh_preview()
 	_refresh_actions()

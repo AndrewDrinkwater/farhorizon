@@ -69,6 +69,13 @@ func test_dragged_waypoints_compose_into_the_route_order() -> void:
 	assert_eq(order.get("waypoints").size(), 2, "dragged waypoints composed into the route")
 
 
+func test_arrival_clears_the_plot() -> void:
+	EventBus.nav_target_selected.emit("verdant")
+	assert_ne(_helm._sel_kind, Travel.TargetKind.NONE, "a course is plotted")
+	EventBus.course_completed.emit()
+	assert_eq(_helm._sel_kind, Travel.TargetKind.NONE, "plot cleared on arrival")
+
+
 func test_clear_course_resets_selection_and_emits_clear() -> void:
 	EventBus.nav_target_selected.emit("verdant")
 	watch_signals(EventBus)

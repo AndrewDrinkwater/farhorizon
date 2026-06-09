@@ -351,6 +351,7 @@ func _arrive_point(dest: Vector2) -> void:
 	GameState.ship.location_body_id = ""
 	GameState.ship.current_order = {}
 	_set_state(FlightCore.State.IDLE)
+	EventBus.course_completed.emit()  # Helm clears the plot (ADR 0028)
 	_acknowledge("VOICE_SHIP_ARRIVED")
 	_notify_context()
 
@@ -368,6 +369,7 @@ func _arrive(body: BodyData) -> void:
 	GameState.ship.location_body_id = body.id
 	GameState.ship.current_order = {}
 	_set_state(FlightCore.State.IDLE)
+	EventBus.course_completed.emit()  # Helm clears the plot (ADR 0028)
 	_acknowledge("VOICE_SHIP_ARRIVED")
 	_notify_context()
 
