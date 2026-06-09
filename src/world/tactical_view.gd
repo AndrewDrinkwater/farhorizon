@@ -50,6 +50,11 @@ var _px_per_wu: float = 0.1
 var _burn: int = FlightMath.Burn.STANDARD  # mirrors the Helm burn selector (ADR 0019)
 var _ring_mode: int = RingMode.ISOCHRONE   # ETA rings ↔ distance rings (Helm toggle)
 var _max_ring_px: float = 0.0
+# Render interpolation of the per-tick transit position (ADR 0004): the scope is
+# ship-centred, so easing the ship reference glides the whole world between ticks.
+var _ship_prev: Vector2 = Vector2.ZERO
+var _ship_curr: Vector2 = Vector2.ZERO
+var _tick_accum: float = 0.0
 var _font: Font
 
 
@@ -61,7 +66,27 @@ func build(system: SystemData) -> void:
 	EventBus.system_changed.connect(_on_system_changed)
 	EventBus.nav_route_changed.connect(_on_route_changed)
 	EventBus.nav_ring_mode_changed.connect(func(mode: int) -> void: _ring_mode = mode)
+	EventBus.sim_tick.connect(_on_ship_tick.unbind(1))
 	_init_system(system)
+
+
+## Snapshot the ship position each tick for render interpolation (ADR 0004).
+func _on_ship_tick() -> void:
+	_ship_prev = _ship_curr
+	_ship_curr = GameState.ship.position
+	_tick_accum = 0.0
+
+
+## The ship reference for the ship-centred projection: eased between the last two
+## ticks while under way in space; the live position otherwise.
+func _interp_ship() -> Vector2:
+	if bool(GameState.ship.current_order.get("engaged", false)) \
+			and GameState.ship.location == Travel.Location.DEEP_SPACE:
+		var alpha := clampf(_tick_accum / SimClock.SECONDS_PER_TICK, 0.0, 1.0)
+		return _ship_prev.lerp(_ship_curr, alpha)
+	_ship_curr = GameState.ship.position
+	_ship_prev = _ship_curr
+	return _ship_curr
 
 
 func _on_system_changed(system_id: String) -> void:
@@ -73,6 +98,9 @@ func _init_system(system: SystemData) -> void:
 	_system = system
 	_selected_id = ""
 	_has_point_sel = false
+	_ship_curr = GameState.ship.position
+	_ship_prev = _ship_curr
+	_tick_accum = 0.0
 	queue_redraw()
 
 
@@ -92,8 +120,9 @@ func _on_point_selected(point: Vector2) -> void:
 	_selected_id = ""
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if visible:
+		_tick_accum += delta * SimClock.get_speed()  # sub-tick progress for interpolation
 		queue_redraw()
 
 
@@ -108,7 +137,7 @@ func _recompute() -> void:
 
 
 func _to_screen(real_pos: Vector2) -> Vector2:
-	return _center + (real_pos - GameState.ship.position) * _px_per_wu
+	return _center + (real_pos - _interp_ship()) * _px_per_wu
 
 
 # --- Draw ---
@@ -339,7 +368,7 @@ func _under_way() -> bool:
 func _course_route(order: Dictionary) -> PackedVector2Array:
 	var target := _find(String(order.get("target_id", "")))
 	var dest: Vector2 = target.position if target != null else order.get("dest", GameState.ship.position)
-	var route := PackedVector2Array([GameState.ship.position])
+	var route := PackedVector2Array([_interp_ship()])
 	for wp: Vector2 in order.get("waypoints", []):
 		route.append(wp)
 	route.append(dest)

@@ -81,9 +81,15 @@ A persistent console; the mission clock keeps running while it's open.
 | **Course Order** | `TPanel` + `TButton` + burn selector + `TReadout` | Selected target, burn intensity, ETA + reaction-mass preview, **Lay In Course**; plus All Stop, Establish Orbit / Dock, Belay. |
 | **Flight Status** | `TReadout` + `TGauge` + `TLight` | Flight state (named, not colour-only — ADR 0012), ETA / arrival time, distance, reaction mass — plus a **transient acknowledgment line** (the ship's "Course laid in", fades after a few seconds; ADR 0025). |
 | **Target Information** | `TPanel` + `TReadout`s | Details of the current selection, burn-aware (ADR 0025): a body's type/parent/distance/ETA/RM/reachability/dock+refuel/has-moons; a contact's tier (Blip/Identified)/kind/scan availability; a waypoint's bearing/ETA. Replaces the old Order Log. |
+| **Controls** (clustered) | `TButton` groups | Actions in labelled clusters — **Flight** / **Docking** / **Surface** / **Sensors** — each cluster *hides* when it doesn't apply to the ship's situation; buttons within a visible cluster grey when not available now (ADR 0032). |
+| **Contacts directory** | tree + filter chips | All targets (bodies + contacts) as a filterable hierarchy (star→planets→moons; contacts grouped), selecting drives Target Info + plotting (ADR 0032). |
+| **Transition indicators** | `AltitudeIndicator` / dock approach | Shown only during a timed transition: an atmosphere-band altitude gauge with the ship moving up/down on descent/ascent, or a dock approach progress bar (ADR 0033). |
 
-Time controls (pause / 1× / 2× / 4×) live in the persistent terminal shell, not
-inside Helm — they're the captain's *watch* speed, not a flight order.
+The Helm is one console in the **console shell** (ADR 0031); the console bar
+switches to Ship/Engineering (stub) and future consoles. The Helm owns the
+nav-view stage (orrery / scope / surface). Time controls (pause / 1× / 2× / 4×)
+live in the persistent terminal shell, not inside Helm — they're the captain's
+*watch* speed, not a flight order.
 
 All labels are `tr()` keys (ADR 0010); all state shown with a non-colour
 channel (ADR 0012).

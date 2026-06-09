@@ -33,3 +33,31 @@ Optional later: a height/inclination axis with drop-lines for true orrery
 verticality (needs a per-body elevation value).
 
 *Parked 2026-06-09.*
+
+---
+
+## Moving NPCs / live contacts
+
+**Idea:** transient contacts (ships, haulers, probes, patrols) that actually
+**move** and act, instead of sitting static — so a sensor sweep feels alive and
+the frontier feels inhabited.
+
+**Why it's parked:** this is game *logic and intelligence*, not a nav refinement —
+it needs its own design pass. Open questions it raises:
+- **Behaviour model:** goals/states (patrol, haul a route, flee, investigate),
+  not just velocity. Likely a small behaviour/FSM per contact kind.
+- **Motion on the discrete clock:** contacts move per `sim_tick` in real space
+  (pairs with the existing `Sensors` segment check); detection already handles
+  things entering/leaving range.
+- **Save:** contacts become *runtime state* (position, goal, heading), not purely
+  authored — `GameState` must serialize them; authored `ContactData` becomes a
+  spawn template.
+- **Performance:** many moving contacts ticking + re-detection each tick.
+- **Interaction surface:** do they react to the player (hail, evade, intercept)?
+  Ties into a future Comms/encounter system.
+
+**If promoted:** its own design doc + ADR(s); don't bolt onto the contact model
+piecemeal. The static `ContactData` + `Sensors` work is forward-compatible (a
+moving contact is a `ContactData` template + runtime motion state).
+
+*Parked 2026-06-09.*

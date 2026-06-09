@@ -4,6 +4,46 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-09 — Design: console shell + Helm control refresh + dock timing (ADR 0031–0033)
+
+Design session (no code). Nav-console maturation batch from captain feedback:
+
+- **Console shell (ADR 0031):** realise ADR 0013 — a `ConsoleShell` hosting
+  multiple consoles with a **console bar / tabs** switcher. The Helm becomes one
+  console and owns the nav-view stage; a stub **Ship / Engineering** console is the
+  second slot. Frame for Comms/Survey/Crew/Cargo later.
+- **Helm control groups + contacts directory (ADR 0032):** the ~15 flat buttons
+  regroup into **Flight / Docking / Surface / Sensors** clusters that *hide* when
+  they don't apply to the ship's context (control-panel feel, less clutter); a
+  hierarchical, **filterable** directory of all contacts + bodies drives selection.
+- **Dock timing + transition indicators (ADR 0033):** dock/undock become **timed**
+  (modifiable stat, time-only, mirrors landing); an **altitude/atmosphere band
+  gauge** shows the ship moving up/down on descent/ascent, and a **dock approach**
+  indicator shows the docking manoeuvre.
+
+**Backlogged:** *moving NPCs / live contacts* — game logic + intelligence, needs
+its own design pass (behaviour, runtime contact state, perf, save). In `BACKLOG.md`.
+
+Not built yet — ready to hand to Claude Code.
+
+---
+
+## 2026-06-09 — Smooth space transit: render interpolation (ADR 0004)
+
+The space ship still stepped per tick along its course (the per-tick flight logic
+updates `ship.position` once a tick; views drew it raw). Added the render
+interpolation ADR 0004 anticipates — **logic stays per-tick, the views ease the
+drawn position between the last two tick snapshots**. `OrreryView` + `TacticalView`
+snapshot `ship.position` on `sim_tick`, accumulate sub-tick seconds in `_process`,
+and draw `prev.lerp(curr, accum / SECONDS_PER_TICK)` (clamped) while under way in
+deep space; live position otherwise (orbit is already per-frame). Orrery: ship
+marker, facing, course-line start. Tactical (ship-centred): the projection
+reference, so the whole world glides. FlightController + its tests untouched.
+
+197 GUT tests green (+3 interpolation); boots clean.
+
+---
+
 ## 2026-06-09 — Surface fixes: real glide + Land-picks-a-spot
 
 - **Glide (real fix):** the per-tick interpolation via `get_tick_fraction` was the

@@ -53,6 +53,11 @@ var _zoom: float = 1.0          # wheel zoom about the cursor (ADR 0023)
 var _pan: Vector2 = Vector2.ZERO  # drag pan
 var _panning: bool = false
 var _pan_last: Vector2 = Vector2.ZERO
+# Render interpolation of the per-tick transit position (ADR 0004): draw the ship
+# eased between its last two tick positions so it glides instead of stepping.
+var _ship_prev: Vector2 = Vector2.ZERO
+var _ship_curr: Vector2 = Vector2.ZERO
+var _tick_accum: float = 0.0  # speed-scaled seconds since the last tick
 var _font: Font
 
 
@@ -67,7 +72,28 @@ func build(system: SystemData) -> void:
 	EventBus.contact_promoted.connect(_on_contacts_changed.unbind(2))
 	EventBus.system_changed.connect(_on_system_changed)
 	EventBus.nav_route_changed.connect(_on_route_changed)
+	EventBus.sim_tick.connect(_on_ship_tick.unbind(1))
 	_init_system(system)
+
+
+## Snapshot the ship's position each tick for render interpolation (ADR 0004).
+func _on_ship_tick() -> void:
+	_ship_prev = _ship_curr
+	_ship_curr = GameState.ship.position
+	_tick_accum = 0.0
+
+
+## The ship position to draw: eased between the last two ticks while under way in
+## space (smooth transit); the live position otherwise (orbit is per-frame, idle
+## is static).
+func _interp_ship() -> Vector2:
+	if bool(GameState.ship.current_order.get("engaged", false)) \
+			and GameState.ship.location == Travel.Location.DEEP_SPACE:
+		var alpha := clampf(_tick_accum / SimClock.SECONDS_PER_TICK, 0.0, 1.0)
+		return _ship_prev.lerp(_ship_curr, alpha)
+	_ship_curr = GameState.ship.position
+	_ship_prev = _ship_curr
+	return _ship_curr
 
 
 func _on_route_changed(route: PackedVector2Array, laid_in: bool) -> void:
@@ -90,6 +116,9 @@ func _init_system(system: SystemData) -> void:
 	_has_point_sel = false
 	_zoom = 1.0
 	_pan = Vector2.ZERO
+	_ship_curr = GameState.ship.position
+	_ship_prev = _ship_curr
+	_tick_accum = 0.0
 	if system != null:
 		for body: BodyData in system.bodies:
 			_by_id[body.id] = body
@@ -112,7 +141,8 @@ func _rebuild_params() -> void:
 	_params.ring_outer = minf(vp.x, vp.y) * 0.42
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_tick_accum += delta * SimClock.get_speed()  # sub-tick progress for interpolation
 	queue_redraw()  # ship moves; contacts wink; cheap (one instrument)
 
 
@@ -399,7 +429,7 @@ func _under_way() -> bool:
 
 ## The laid-in route as real points: ship → waypoints → destination.
 func _course_route(order: Dictionary) -> PackedVector2Array:
-	var route := PackedVector2Array([GameState.ship.position])
+	var route := PackedVector2Array([_interp_ship()])
 	for wp: Vector2 in order.get("waypoints", []):
 		route.append(wp)
 	route.append(_course_dest(order))
@@ -497,7 +527,7 @@ func _draw_course_time(ship_pos: Vector2, target_pos: Vector2) -> void:
 
 
 func _draw_ship() -> void:
-	var at := _project_real(GameState.ship.position)
+	var at := _project_real(_interp_ship())
 	var facing := _ship_facing()
 	var fwd := Vector2.from_angle(facing)
 	var side := fwd.orthogonal()
@@ -511,7 +541,7 @@ func _ship_facing() -> float:
 	var order: Dictionary = GameState.ship.current_order
 	if String(order.get("type", "")) == "course":
 		var dir := _project_course_point(_course_dest(order)) \
-			- _project_course_point(GameState.ship.position)
+			- _project_course_point(_interp_ship())
 		if dir.length() > 0.5:
 			return dir.angle()
 	return GameState.ship.heading
