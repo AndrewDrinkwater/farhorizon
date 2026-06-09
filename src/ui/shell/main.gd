@@ -21,6 +21,7 @@ var _orrery: OrreryView
 var _tactical: TacticalView
 var _surface: SurfaceView
 var _tactical_active: bool = false  # T toggles this when not landed
+var _surface_pick: bool = false  # Helm requested the surface map for an Open-Landing pick (ADR 0030)
 
 
 func _ready() -> void:
@@ -37,6 +38,7 @@ func _ready() -> void:
 	EventBus.ship_context_changed.connect(_update_nav_views)
 	EventBus.game_state_loaded.connect(_update_nav_views)
 	EventBus.system_changed.connect(_update_nav_views.unbind(1))
+	EventBus.surface_map_requested.connect(_on_surface_map_requested)
 	_update_nav_views()
 
 	print("[Far Horizon] boot — v%s, schema %d · system '%s' (Space=pause, [/]=speed, T=tactical, F3=debug, F5/F9=save/load)" % [
@@ -48,20 +50,26 @@ func _ready() -> void:
 ## surface view owns the Nav Plot then).
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_tactical") and _orrery != null \
-			and GameState.ship.location != Travel.Location.LANDED:
+			and GameState.ship.location != Travel.Location.LANDED and not _surface_pick:
 		_tactical_active = not _tactical_active
 		_update_nav_views()
 		EventBus.nav_view_changed.emit(_tactical_active)  # retarget the Helm mode toggle
 
 
-## Show the surface map while LANDED, else the orrery or scope per the T toggle.
+func _on_surface_map_requested(show: bool) -> void:
+	_surface_pick = show
+	_update_nav_views()
+
+
+## Show the surface map while LANDED or picking a landing spot, else the orrery or
+## scope per the T toggle.
 func _update_nav_views() -> void:
 	if _orrery == null:
 		return
-	var landed := GameState.ship.location == Travel.Location.LANDED
-	_surface.visible = landed
-	_orrery.visible = not landed and not _tactical_active
-	_tactical.visible = not landed and _tactical_active
+	var surface_on := GameState.ship.location == Travel.Location.LANDED or _surface_pick
+	_surface.visible = surface_on
+	_orrery.visible = not surface_on and not _tactical_active
+	_tactical.visible = not surface_on and _tactical_active
 
 
 ## Pick a starting system if none is loaded yet (fresh run). A loaded save will

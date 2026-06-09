@@ -252,10 +252,14 @@ func _land(order: Dictionary) -> void:
 	if body == null or not body.landable:
 		EventBus.order_rejected.emit("ORDER_REJECT_NOT_LANDABLE")
 		return
+	var site_id := String(order.get("site_id", ""))
+	# Touchdown point: a named site's authored spot, else the chosen free point (ADR 0030).
+	var touchdown: Vector2 = _surface_pos(body, site_id) if site_id != "" \
+		else order.get("pos", body.wild_touchdown)
 	var ticks: int = LandingMath.modified_ticks(GameState.ship.base_descent_ticks,
 		[LandingMath.atmosphere_factor(body.atmosphere_atm)])
 	GameState.ship.current_order = {
-		"type": "land", "site_id": String(order.get("site_id", "")),
+		"type": "land", "site_id": site_id, "to": touchdown,
 		"ticks_total": maxi(1, ticks), "ticks_left": maxi(1, ticks),
 	}
 	_set_state(FlightCore.State.DESCENDING)
@@ -288,13 +292,15 @@ func _move(order: Dictionary) -> void:
 		EventBus.order_rejected.emit("ORDER_REJECT_TARGET_UNKNOWN")
 		return
 	var dest_site := String(order.get("site_id", ""))
-	if dest_site == GameState.ship.surface_site_id:
+	var from: Vector2 = GameState.ship.surface_position
+	var to: Vector2 = _surface_pos(body, dest_site) if dest_site != "" \
+		else order.get("pos", from)
+	if from.distance_to(to) < 1.0:
 		EventBus.order_rejected.emit("ORDER_REJECT_ALREADY_HERE")
 		return
-	var ticks := SurfaceMath.surface_ticks(_surface_pos(body, GameState.ship.surface_site_id),
-		_surface_pos(body, dest_site), GameState.ship.surface_speed_su_per_tick)
+	var ticks := SurfaceMath.surface_ticks(from, to, GameState.ship.surface_speed_su_per_tick)
 	GameState.ship.current_order = {
-		"type": "surface_move", "site_id": dest_site, "from_site_id": GameState.ship.surface_site_id,
+		"type": "surface_move", "site_id": dest_site, "from": from, "to": to,
 		"ticks_total": maxi(1, ticks), "ticks_left": maxi(1, ticks),
 	}
 	_set_state(FlightCore.State.SURFACE_MOVING)
@@ -312,6 +318,7 @@ func _tick_transition(order: Dictionary) -> void:
 		"land":
 			GameState.ship.location = Travel.Location.LANDED
 			GameState.ship.surface_site_id = String(order.get("site_id", ""))
+			GameState.ship.surface_position = order.get("to", Vector2.ZERO)
 			GameState.ship.current_order = {}
 			_set_state(FlightCore.State.IDLE)
 			_acknowledge("VOICE_SHIP_LANDED")
@@ -327,6 +334,7 @@ func _tick_transition(order: Dictionary) -> void:
 			_acknowledge("VOICE_SHIP_AIRBORNE")
 		"surface_move":
 			GameState.ship.surface_site_id = String(order.get("site_id", ""))
+			GameState.ship.surface_position = order.get("to", GameState.ship.surface_position)
 			GameState.ship.current_order = {}
 			_set_state(FlightCore.State.IDLE)
 			_acknowledge("VOICE_SHIP_ARRIVED_SITE")

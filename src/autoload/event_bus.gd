@@ -39,6 +39,11 @@ signal nav_focus_closed()
 ## A surface site was picked (SurfaceView or the Helm picker) — "" = Open Landing.
 ## The chosen landing/move destination (ADR 0030).
 signal surface_site_selected(site_id: String)
+## A free surface point was clicked on the map (su) — a free touchdown / move spot.
+signal surface_point_selected(point: Vector2)
+## The Helm wants the surface map shown while orbiting (Open Landing pick mode) —
+## the shell swaps orrery → surface to pick a touchdown spot (ADR 0030).
+signal surface_map_requested(show: bool)
 ## The compose-time route changed (ADR 0027/0028) — ship → waypoints → destination;
 ## the nav views draw it as the plotted course (solid if `laid_in`, else dashed).
 ## Empty route = nothing plotted.

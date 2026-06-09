@@ -19,7 +19,10 @@ var _sel_id: String = ""
 var _sel_point: Vector2 = Vector2.ZERO
 var _route_waypoints: Array[Vector2] = []  # intermediate route points (ADR 0027)
 var _plot_laid_in: bool = false  # has the current plot been laid in? (solid vs dashed, ADR 0028)
-var _surface_target_id: String = ""  # picked surface site — land/move destination ("" = Open Landing, ADR 0030)
+var _surface_target_id: String = ""  # picked surface site — land/move destination ("" = Open Landing/free, ADR 0030)
+var _surface_target_pos: Vector2 = Vector2.ZERO  # the target's surface coords (su) — site pos or free point
+var _picking_landing: bool = false   # Open Landing selected while orbiting → surface map shown to pick a spot
+var _map_shown_requested: bool = false  # last surface_map_requested value (emit only on change)
 var _picker_key: String = ""  # cached picker context (body+location), rebuilt when it changes
 var _site_picker: HBoxContainer
 var _site_buttons: Dictionary = {}  # site id:String -> TButton
@@ -254,6 +257,7 @@ func _connect_bus() -> void:
 	EventBus.course_completed.connect(_on_course_completed)
 	EventBus.nav_view_changed.connect(_on_view_changed)
 	EventBus.surface_site_selected.connect(_on_surface_site_selected)
+	EventBus.surface_point_selected.connect(_on_surface_point_selected)
 	EventBus.ship_context_changed.connect(_refresh_all)
 	EventBus.sim_tick.connect(_on_tick.unbind(1))
 	EventBus.fuel_changed.connect(_on_fuel_changed)
@@ -503,7 +507,7 @@ func _undock() -> void:
 
 
 func _land() -> void:
-	EventBus.order_issued.emit({"type": "land", "site_id": _surface_target_id})
+	EventBus.order_issued.emit({"type": "land", "site_id": _surface_target_id, "pos": _surface_target_pos})
 
 
 func _take_off() -> void:
@@ -511,7 +515,7 @@ func _take_off() -> void:
 
 
 func _move() -> void:
-	EventBus.order_issued.emit({"type": "move", "site_id": _surface_target_id})
+	EventBus.order_issued.emit({"type": "move", "site_id": _surface_target_id, "pos": _surface_target_pos})
 
 
 # --- Refresh ---
@@ -612,13 +616,43 @@ func _has_other_surface_site(body: BodyData) -> bool:
 
 func _on_surface_site_selected(site_id: String) -> void:
 	_surface_target_id = site_id
+	_surface_target_pos = _surface_pos(_picker_body(), site_id)
+	_refresh_site_buttons()
+	_refresh_target_info()
+
+
+## A free point was clicked on the surface map — a free touchdown / move spot.
+func _on_surface_point_selected(point: Vector2) -> void:
+	_surface_target_id = ""
+	_surface_target_pos = point
 	_refresh_site_buttons()
 	_refresh_target_info()
 
 
 ## A picker button (or the SurfaceView) picked a site — funnel through one signal.
+## While orbiting, picking Open Landing opens the surface map to choose a spot; a
+## named site closes it (lands at the fixed spot) — ADR 0030.
 func _select_site(site_id: String) -> void:
 	EventBus.surface_site_selected.emit(site_id)
+	if _at_landable_orbit():
+		_picking_landing = (site_id == "")
+	_sync_surface_map()
+
+
+func _at_landable_orbit() -> bool:
+	var body := _resolve_body(GameState.ship.location_body_id)
+	return GameState.ship.location == Travel.Location.HOLDING and body != null and body.landable
+
+
+## Tell the shell whether to show the surface map for an Open-Landing pick (emit
+## only on change). Picking is cleared whenever we're not orbiting a landable body.
+func _sync_surface_map() -> void:
+	if GameState.ship.location != Travel.Location.HOLDING:
+		_picking_landing = false
+	var show := _at_landable_orbit() and _picking_landing
+	if show != _map_shown_requested:
+		_map_shown_requested = show
+		EventBus.surface_map_requested.emit(show)
 
 
 ## The body whose sites the picker lists: the landed body, or a landable body we're
@@ -644,7 +678,12 @@ func _refresh_site_picker() -> void:
 	if key != _picker_key:
 		_picker_key = key
 		_rebuild_site_picker(body)
+		# Default the target to Open Landing for a freshly-entered body.
+		if body != null:
+			_surface_target_id = ""
+			_surface_target_pos = body.wild_touchdown
 	_refresh_site_buttons()
+	_sync_surface_map()
 
 
 func _rebuild_site_picker(body: BodyData) -> void:
@@ -906,12 +945,11 @@ func _ti_surface() -> void:
 	var body := _resolve_body(GameState.ship.location_body_id)
 	_ti_name.set_value(_site_name(body, GameState.ship.surface_site_id))
 	_ti_type.set_value(_atmosphere_label(body))
-	if body != null and _surface_target_id != GameState.ship.surface_site_id:
-		var d := _surface_pos(body, GameState.ship.surface_site_id).distance_to(
-			_surface_pos(body, _surface_target_id))
-		var ticks := SurfaceMath.surface_ticks(_surface_pos(body, GameState.ship.surface_site_id),
-			_surface_pos(body, _surface_target_id), GameState.ship.surface_speed_su_per_tick)
-		_ti_dist.set_value(tr("HELM_SURFACE_DIST_FORMAT").format({"su": "%.0f" % d}))
+	var from: Vector2 = GameState.ship.surface_position
+	var to: Vector2 = _surface_target_pos
+	if from.distance_to(to) >= 1.0:
+		var ticks := SurfaceMath.surface_ticks(from, to, GameState.ship.surface_speed_su_per_tick)
+		_ti_dist.set_value(tr("HELM_SURFACE_DIST_FORMAT").format({"su": "%.0f" % from.distance_to(to)}))
 		_ti_eta.set_value(_format_eta(ticks))
 		_ti_status.set_value(tr("HELM_MOVE_TO").format({"site": _site_name(body, _surface_target_id)}))
 	else:

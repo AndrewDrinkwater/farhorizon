@@ -4,6 +4,23 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-09 — Surface feel pass: rectangular map, pick landing spot, smooth move
+
+In-engine feedback on the surface view (ADR 0030). **194 GUT tests green; boots clean.**
+
+- **Rectangular geographic map:** SurfaceView is now a framed rectangle (su box fit
+  with uniform scale + grid fill), not a centred circle.
+- **Pick a landing position:** new `ShipState.surface_position` (su, saved) is the
+  authoritative ship surface coord. Land/Move carry a `pos`; a named site uses its
+  authored spot, Open Landing / a free click uses the picked point. Choosing **Open
+  Landing** in the Helm picker swaps the Nav Plot to the surface map
+  (`surface_map_requested`) to click a touchdown spot; a named site lands at its
+  fixed spot. **Move** accepts a clicked free point or a site (`surface_point_selected`).
+- **Smooth motion:** the ship interpolates along a surface Move per-frame via
+  `SimClock.get_tick_fraction()` (no per-tick jumps).
+
+---
+
 ## 2026-06-09 — Build: landing + surface navigation (ADR 0029/0030)
 
 Built the landing slice in order, tests green at each step. **193 GUT tests green;

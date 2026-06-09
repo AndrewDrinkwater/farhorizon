@@ -23,6 +23,7 @@ var current_order: Dictionary = {}
 ## ("" = Open Landing / wild touchdown). Base land stats live here until HullData
 ## exists; durations are modified (LandingMath) — these are the unmodified bases.
 var surface_site_id: String = ""
+var surface_position: Vector2 = Vector2.ZERO  # actual surface coords (su) — site or free point
 var surface_speed_su_per_tick: float = 50.0  # planetary flight speed (su/tick)
 var base_descent_ticks: int = 6
 var base_ascent_ticks: int = 5
@@ -41,6 +42,7 @@ func to_dict() -> Dictionary:
 		"orbit_angle": orbit_angle,
 		"current_order": current_order,
 		"surface_site_id": surface_site_id,
+		"surface_position": surface_position,
 		"surface_speed_su_per_tick": surface_speed_su_per_tick,
 		"base_descent_ticks": base_descent_ticks,
 		"base_ascent_ticks": base_ascent_ticks,
@@ -61,6 +63,7 @@ static func from_dict(data: Dictionary) -> ShipState:
 	s.orbit_angle = float(data.get("orbit_angle", s.orbit_angle))
 	s.current_order = data.get("current_order", s.current_order)
 	s.surface_site_id = String(data.get("surface_site_id", s.surface_site_id))
+	s.surface_position = data.get("surface_position", s.surface_position)
 	s.surface_speed_su_per_tick = float(data.get("surface_speed_su_per_tick", s.surface_speed_su_per_tick))
 	s.base_descent_ticks = int(data.get("base_descent_ticks", s.base_descent_ticks))
 	s.base_ascent_ticks = int(data.get("base_ascent_ticks", s.base_ascent_ticks))

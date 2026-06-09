@@ -33,12 +33,22 @@ func test_tracks_the_landed_body() -> void:
 	assert_eq(_sv._body.id, "verdant")
 
 
-func test_ship_surface_position_resolves_the_site() -> void:
+func test_ship_surface_position_is_the_authoritative_field() -> void:
 	GameState.ship.location = Travel.Location.LANDED
 	GameState.ship.location_body_id = "verdant"
-	GameState.ship.surface_site_id = "verdant_outpost"
+	GameState.ship.surface_position = Vector2(42.0, -17.0)  # e.g. a free touchdown
 	EventBus.ship_context_changed.emit()
-	var outpost := _sv._body.surface_locations[0]
-	assert_eq(_sv._ship_surface_pos(), outpost.surface_position, "parked at the outpost")
-	GameState.ship.surface_site_id = ""  # Open Landing
-	assert_eq(_sv._ship_surface_pos(), _sv._body.wild_touchdown, "Open Landing = wild touchdown")
+	assert_eq(_sv._ship_surface_pos(), Vector2(42.0, -17.0), "renders at the ship's surface coords")
+
+
+func test_ship_surface_position_interpolates_a_move() -> void:
+	GameState.ship.location = Travel.Location.LANDED
+	GameState.ship.location_body_id = "verdant"
+	GameState.ship.surface_position = Vector2.ZERO
+	GameState.ship.current_order = {
+		"type": "surface_move", "from": Vector2(0, 0), "to": Vector2(100, 0),
+		"ticks_total": 4, "ticks_left": 2,  # ~halfway (plus sub-tick fraction)
+	}
+	EventBus.ship_context_changed.emit()
+	var x := _sv._ship_surface_pos().x
+	assert_true(x >= 50.0 and x <= 75.0, "interpolated roughly halfway along the move, got %f" % x)
