@@ -58,3 +58,61 @@ static func contains(shape: int, center: Vector2, radius: float, inner: float,
 		ZoneData.Shape.POLYGON:
 			return points.size() >= 3 and Geometry2D.is_point_in_polygon(point, points)
 	return false
+
+
+## Does the segment a→b touch the zone? (course-leg validation, ADR 0027)
+static func segment_intersects(shape: int, center: Vector2, radius: float, inner: float,
+		points: PackedVector2Array, a: Vector2, b: Vector2) -> bool:
+	match shape:
+		ZoneData.Shape.CIRCLE:
+			var closest := Geometry2D.get_closest_point_to_segment(center, a, b)
+			return center.distance_to(closest) <= radius
+		ZoneData.Shape.BAND:
+			var c := Geometry2D.get_closest_point_to_segment(center, a, b)
+			if center.distance_to(c) > radius:
+				return false  # entirely beyond the outer edge
+			# Entirely within the inner hole? (the disc is convex, so both ends inside ⇒ all inside)
+			return not (center.distance_to(a) <= inner and center.distance_to(b) <= inner)
+		ZoneData.Shape.POLYGON:
+			if points.size() < 3:
+				return false
+			if Geometry2D.is_point_in_polygon(a, points) or Geometry2D.is_point_in_polygon(b, points):
+				return true
+			for i in points.size():
+				var e0 := points[i]
+				var e1 := points[(i + 1) % points.size()]
+				if Geometry2D.segment_intersects_segment(a, b, e0, e1) != null:
+					return true
+			return false
+	return false
+
+
+## Obstruction levels for course-leg validation (ADR 0027), worst-wins.
+enum Block { CLEAR, HAZARD, NOGO }
+
+
+## Worst obstruction across a route's consecutive legs, from zones tagged
+## `blocks_course` ("nogo" → reject the leg; "hazard" → warn). `route` is the full
+## ordered point list (ship, waypoints…, destination). Pure (resolves anchors).
+static func route_block(system: SystemData, route: PackedVector2Array) -> int:
+	var worst := Block.CLEAR
+	for i in range(route.size() - 1):
+		worst = maxi(worst, _leg_block(system, route[i], route[i + 1]))
+		if worst == Block.NOGO:
+			return Block.NOGO
+	return worst
+
+
+static func _leg_block(system: SystemData, a: Vector2, b: Vector2) -> int:
+	var worst := Block.CLEAR
+	for zone: ZoneData in system.zones:
+		var tag := String(zone.effects.get("blocks_course", ""))
+		if tag == "":
+			continue
+		if segment_intersects(zone.shape, world_center(zone, system), zone.radius,
+				zone.inner_radius, world_points(zone, system), a, b):
+			if tag == "nogo":
+				return Block.NOGO
+			elif tag == "hazard":
+				worst = Block.HAZARD
+	return worst

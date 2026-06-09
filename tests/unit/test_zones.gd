@@ -66,3 +66,49 @@ func test_polygon_degenerate_is_never_inside() -> void:
 		"fewer than three points is not a region")
 	assert_false(Zones.contains(ZoneData.Shape.POLYGON, Vector2.ZERO, 0.0, 0.0, NONE, Vector2.ZERO),
 		"empty polygon is not a region")
+
+
+# --- segment_intersects (ADR 0027) ---
+
+func test_circle_segment_clip_inside_outside() -> void:
+	var c := Vector2.ZERO
+	# A leg passing through the disc.
+	assert_true(Zones.segment_intersects(ZoneData.Shape.CIRCLE, c, 100.0, 0.0, NONE,
+		Vector2(-200.0, 0.0), Vector2(200.0, 0.0)), "leg crosses the disc")
+	# A leg clipping the edge (closest approach == radius).
+	assert_true(Zones.segment_intersects(ZoneData.Shape.CIRCLE, c, 100.0, 0.0, NONE,
+		Vector2(-200.0, 100.0), Vector2(200.0, 100.0)), "tangent leg touches")
+	# A leg passing wide.
+	assert_false(Zones.segment_intersects(ZoneData.Shape.CIRCLE, c, 100.0, 0.0, NONE,
+		Vector2(-200.0, 300.0), Vector2(200.0, 300.0)), "wide leg misses")
+	# A leg fully inside.
+	assert_true(Zones.segment_intersects(ZoneData.Shape.CIRCLE, c, 100.0, 0.0, NONE,
+		Vector2(-10.0, 0.0), Vector2(10.0, 0.0)), "leg fully inside counts")
+
+
+func test_band_segment_only_in_hole_misses() -> void:
+	var c := Vector2.ZERO  # inner 100, outer 300
+	assert_false(Zones.segment_intersects(ZoneData.Shape.BAND, c, 300.0, 100.0, NONE,
+		Vector2(-50.0, 0.0), Vector2(50.0, 0.0)), "leg entirely in the inner hole misses the annulus")
+	assert_true(Zones.segment_intersects(ZoneData.Shape.BAND, c, 300.0, 100.0, NONE,
+		Vector2(-400.0, 0.0), Vector2(400.0, 0.0)), "leg crossing the annulus hits")
+	assert_false(Zones.segment_intersects(ZoneData.Shape.BAND, c, 300.0, 100.0, NONE,
+		Vector2(-400.0, 400.0), Vector2(400.0, 400.0)), "leg beyond the outer edge misses")
+
+
+func test_polygon_segment_crossing_and_clear() -> void:
+	var sq := PackedVector2Array([Vector2(0, 0), Vector2(100, 0), Vector2(100, 100), Vector2(0, 100)])
+	assert_true(Zones.segment_intersects(ZoneData.Shape.POLYGON, Vector2.ZERO, 0.0, 0.0, sq,
+		Vector2(-50.0, 50.0), Vector2(150.0, 50.0)), "leg crosses the square")
+	assert_false(Zones.segment_intersects(ZoneData.Shape.POLYGON, Vector2.ZERO, 0.0, 0.0, sq,
+		Vector2(-50.0, 200.0), Vector2(150.0, 200.0)), "leg passes clear")
+
+
+func test_route_block_picks_worst_and_routes_around() -> void:
+	var system := TypeRegistry.get_system("calder")
+	# A leg straight through the star (calder_corona is a no-go disc at the origin).
+	var through := PackedVector2Array([Vector2(-2000.0, 0.0), Vector2(2000.0, 0.0)])
+	assert_eq(Zones.route_block(system, through), Zones.Block.NOGO, "crossing the corona is no-go")
+	# Routing well around it via a waypoint clears the no-go.
+	var around := PackedVector2Array([Vector2(-2000.0, 0.0), Vector2(0.0, 3000.0), Vector2(2000.0, 0.0)])
+	assert_ne(Zones.route_block(system, around), Zones.Block.NOGO, "a detour around the corona is allowed")
