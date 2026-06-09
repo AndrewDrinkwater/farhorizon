@@ -128,12 +128,43 @@ func test_dock_then_undock_at_station() -> void:
 	assert_eq(GameState.ship.location, Travel.Location.HOLDING, "holding at the station")
 	GameState.ship.reaction_mass = 10.0
 
+	# Dock is now a timed approach (ADR 0033): begins DOCKING, completes after the ticks.
 	EventBus.order_issued.emit({"type": "dock"})
-	assert_eq(GameState.ship.location, Travel.Location.DOCKED, "docked")
-	assert_eq(GameState.ship.reaction_mass, GameState.ship.max_reaction_mass, "refuelled on docking")
+	assert_eq(_fc.get_state(), FlightCore.State.DOCKING, "docking begins, not instant")
+	assert_ne(GameState.ship.location, Travel.Location.DOCKED, "not docked yet")
+	for i in range(20):
+		if GameState.ship.location == Travel.Location.DOCKED:
+			break
+		EventBus.sim_tick.emit(i + 1)
+	assert_eq(GameState.ship.location, Travel.Location.DOCKED, "docked after the timed approach")
+	assert_eq(GameState.ship.reaction_mass, GameState.ship.max_reaction_mass, "refuelled on arrival")
 
 	EventBus.order_issued.emit({"type": "undock"})
+	assert_eq(_fc.get_state(), FlightCore.State.UNDOCKING, "undocking begins")
+	for i in range(20):
+		if GameState.ship.location == Travel.Location.HOLDING:
+			break
+		EventBus.sim_tick.emit(i + 50)
 	assert_eq(GameState.ship.location, Travel.Location.HOLDING, "undocked back to holding")
+
+
+func test_dock_takes_base_dock_ticks() -> void:
+	_hold_at("anchorage")
+	GameState.ship.base_dock_ticks = 3
+	EventBus.order_issued.emit({"type": "dock"})
+	EventBus.sim_tick.emit(1)
+	EventBus.sim_tick.emit(2)
+	assert_ne(GameState.ship.location, Travel.Location.DOCKED, "still approaching at tick 2 of 3")
+	EventBus.sim_tick.emit(3)
+	assert_eq(GameState.ship.location, Travel.Location.DOCKED, "docked exactly at base_dock_ticks")
+
+
+func test_dock_resync_resumes_an_in_progress_approach() -> void:
+	GameState.ship.location = Travel.Location.HOLDING
+	GameState.ship.location_body_id = "anchorage"
+	GameState.ship.current_order = {"type": "dock", "ticks_total": 4, "ticks_left": 2}
+	EventBus.game_state_loaded.emit()
+	assert_eq(_fc.get_state(), FlightCore.State.DOCKING, "resumes the dock approach on load")
 
 
 func test_engage_refused_while_docked() -> void:

@@ -61,6 +61,15 @@ func test_ship_state_surface_fields_round_trip() -> void:
 	assert_eq(int(back.current_order.get("ticks_left")), 2, "in-progress transition persists")
 
 
+func test_ship_state_dock_stats_round_trip() -> void:
+	var s := ShipState.new()
+	s.base_dock_ticks = 7
+	s.base_undock_ticks = 5
+	var back := ShipState.from_dict(s.to_dict())
+	assert_eq(back.base_dock_ticks, 7, "dock-time stat persists (ADR 0033)")
+	assert_eq(back.base_undock_ticks, 5)
+
+
 func test_zones_state_round_trip() -> void:
 	var z := ZonesState.new()
 	z.mark_fired("drift_signal")

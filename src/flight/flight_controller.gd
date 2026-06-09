@@ -190,8 +190,12 @@ func _on_belay() -> void:
 	_notify_context()
 
 
-## Dock at the station we're holding at (refuels at a can_refuel body).
+## Dock at the station we're holding at — a timed approach (ADR 0033). Refuel
+## completes on arrival; time only (no RM), like landing.
 func _dock() -> void:
+	if _is_under_way() or _in_transition():
+		EventBus.order_rejected.emit("ORDER_REJECT_UNDERWAY")
+		return
 	if GameState.ship.location != Travel.Location.HOLDING:
 		EventBus.order_rejected.emit("ORDER_REJECT_NOT_HOLDING")
 		return
@@ -199,11 +203,10 @@ func _dock() -> void:
 	if body == null or not body.can_dock:
 		EventBus.order_rejected.emit("ORDER_REJECT_NOT_AT_STATION")
 		return
-	GameState.ship.location = Travel.Location.DOCKED
-	if body.can_refuel:
-		GameState.ship.reaction_mass = GameState.ship.max_reaction_mass
-		EventBus.fuel_changed.emit(Fuel.Pool.REACTION_MASS, GameState.ship.reaction_mass)
-	_acknowledge("VOICE_SHIP_DOCKED")
+	var ticks: int = LandingMath.modified_ticks(GameState.ship.base_dock_ticks, [])
+	GameState.ship.current_order = {"type": "dock", "ticks_total": maxi(1, ticks), "ticks_left": maxi(1, ticks)}
+	_set_state(FlightCore.State.DOCKING)
+	_acknowledge("VOICE_SHIP_DOCKING")
 	_notify_context()
 
 
@@ -227,13 +230,15 @@ func _scan(order: Dictionary) -> void:
 	_notify_context()
 
 
-## Undock back to the station's holding area.
+## Undock back to the station's holding area — a timed manoeuvre (ADR 0033).
 func _undock() -> void:
-	if GameState.ship.location != Travel.Location.DOCKED:
+	if GameState.ship.location != Travel.Location.DOCKED or _in_transition():
 		EventBus.order_rejected.emit("ORDER_REJECT_NOT_DOCKED")
 		return
-	GameState.ship.location = Travel.Location.HOLDING
-	_acknowledge("VOICE_SHIP_UNDOCKED")
+	var ticks: int = LandingMath.modified_ticks(GameState.ship.base_undock_ticks, [])
+	GameState.ship.current_order = {"type": "undock", "ticks_total": maxi(1, ticks), "ticks_left": maxi(1, ticks)}
+	_set_state(FlightCore.State.UNDOCKING)
+	_acknowledge("VOICE_SHIP_UNDOCKING")
 	_notify_context()
 
 
@@ -329,6 +334,20 @@ func _tick_transition(order: Dictionary) -> void:
 			GameState.ship.current_order = {}
 			_set_state(FlightCore.State.IDLE)
 			_acknowledge("VOICE_SHIP_AIRBORNE")
+		"dock":
+			var body := _resolve_body(GameState.ship.location_body_id)
+			GameState.ship.location = Travel.Location.DOCKED
+			GameState.ship.current_order = {}
+			if body != null and body.can_refuel:  # refuel completes on dock arrival (ADR 0033)
+				GameState.ship.reaction_mass = GameState.ship.max_reaction_mass
+				EventBus.fuel_changed.emit(Fuel.Pool.REACTION_MASS, GameState.ship.reaction_mass)
+			_set_state(FlightCore.State.IDLE)
+			_acknowledge("VOICE_SHIP_DOCKED")
+		"undock":
+			GameState.ship.location = Travel.Location.HOLDING
+			GameState.ship.current_order = {}
+			_set_state(FlightCore.State.IDLE)
+			_acknowledge("VOICE_SHIP_UNDOCKED")
 	_notify_context()
 
 
@@ -350,10 +369,11 @@ func _advance_surface_move(seconds: float) -> void:
 		_notify_context()
 
 
-## A timed surface transition is in progress (busy beat — no new orders).
+## A timed transition is in progress (busy beat — no new orders): a surface
+## transition (ADR 0029/0030) or a dock/undock manoeuvre (ADR 0033).
 func _in_transition() -> bool:
 	var t := String(GameState.ship.current_order.get("type", ""))
-	return t == "land" or t == "take_off" or t == "surface_move"
+	return t == "land" or t == "take_off" or t == "surface_move" or t == "dock" or t == "undock"
 
 
 ## Surface position (su) of a site id on a body ("" = Open Landing / wild touchdown).
@@ -385,9 +405,9 @@ func _process(delta: float) -> void:
 
 func _on_sim_tick(_tick: int) -> void:
 	var order: Dictionary = GameState.ship.current_order
-	# Descent/ascent are timed countdowns; a surface move glides per-frame instead.
+	# Timed countdowns: descent/ascent + dock/undock (a surface move glides per-frame).
 	var ttype := String(order.get("type", ""))
-	if ttype == "land" or ttype == "take_off":
+	if ttype == "land" or ttype == "take_off" or ttype == "dock" or ttype == "undock":
 		_tick_transition(order)
 		return
 	# Holding orbit is handled per-frame in _process, not on ticks.
@@ -581,6 +601,10 @@ func _resync_after_load() -> void:
 			_set_state(FlightCore.State.ASCENDING)
 		"surface_move":
 			_set_state(FlightCore.State.SURFACE_MOVING)
+		"dock":
+			_set_state(FlightCore.State.DOCKING)
+		"undock":
+			_set_state(FlightCore.State.UNDOCKING)
 		_:
 			if not _is_under_way():
 				_set_state(FlightCore.State.IDLE)

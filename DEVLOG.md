@@ -4,6 +4,39 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-09 — Build: console shell + Helm groups/directory + dock timing (ADR 0031–0033)
+
+Built the nav-console batch in three steps, GUT green + clean boot at each.
+**209 GUT tests green.** ADRs 0031, 0032, 0033 confirmed.
+
+1. **Console shell (ADR 0031).** `ConsoleShell` hosts the consoles, shows one at a
+   time, with a persistent top console bar (tabs); switching is pure UI →
+   `console_changed` + `ConfigManager` `console.last_id`; **Tab** cycles (debug
+   console keeps backtick). The **Helm owns its nav-view stage** (orrery / scope /
+   surface / focus inset) + the T toggle + the land/take-off surface swap, moved
+   out of `main.gd` — the stage shows only while Helm is active (views guard input
+   on `is_visible_in_tree`). New stub **`ShipConsole`** (hull / reaction mass /
+   sensor range + TBD sections). `CONSOLE_*`/`SHIP_*` strings, `cycle_console` (Tab).
+2. **Helm control groups + nav directory (ADR 0032).** Actions regrouped into
+   labelled clusters — **Flight / Docking / Surface / Sensors** — in a bottom-centre
+   Controls panel; a whole cluster **hides** when it doesn't apply (pure tested
+   `HelmGroups.visible_groups`), buttons within grey per `Travel.available`. A
+   left-edge **Nav Directory**: filterable hierarchy (star→planets→moons + detected
+   contacts) with category / tier / in-range filters; selecting drives
+   `nav_target_selected`. `HELM_GRP_*`/`HELM_DIR_*` strings.
+3. **Dock timing + indicators (ADR 0033).** Dock/undock are **timed** now
+   (`DOCKING`/`UNDOCKING` phases; `base_dock_ticks`/`base_undock_ticks` modifiable
+   stats, time only; refuel on dock arrival; in-progress resumes on load). New
+   **`AltitudeIndicator`** (atmosphere-band gauge, ship rides down/up on descent/
+   ascent) and **`DockIndicator`** (lateral approach bar), shown only during their
+   transition with smooth sub-tick progress. `FLIGHT_STATE_DOCKING/_UNDOCKING` +
+   indicator strings.
+
+Tests: `HelmGroups` resolver (5), `ConsoleShell` switch/cycle (4), dock timing +
+resync + dock-stat round-trip.
+
+---
+
 ## 2026-06-09 — Design: console shell + Helm control refresh + dock timing (ADR 0031–0033)
 
 Design session (no code). Nav-console maturation batch from captain feedback:

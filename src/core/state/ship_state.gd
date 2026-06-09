@@ -27,6 +27,10 @@ var surface_position: Vector2 = Vector2.ZERO  # actual surface coords (su) — s
 var surface_speed_su_per_tick: float = 50.0  # planetary flight speed (su/tick)
 var base_descent_ticks: int = 6
 var base_ascent_ticks: int = 5
+## Dock / undock durations (ADR 0033) — modifiable stats, time only (no RM), like
+## landing. Future modifiers append per ADR 0029.
+var base_dock_ticks: int = 4
+var base_undock_ticks: int = 3
 
 
 func to_dict() -> Dictionary:
@@ -46,6 +50,8 @@ func to_dict() -> Dictionary:
 		"surface_speed_su_per_tick": surface_speed_su_per_tick,
 		"base_descent_ticks": base_descent_ticks,
 		"base_ascent_ticks": base_ascent_ticks,
+		"base_dock_ticks": base_dock_ticks,
+		"base_undock_ticks": base_undock_ticks,
 	}
 
 
@@ -67,4 +73,6 @@ static func from_dict(data: Dictionary) -> ShipState:
 	s.surface_speed_su_per_tick = float(data.get("surface_speed_su_per_tick", s.surface_speed_su_per_tick))
 	s.base_descent_ticks = int(data.get("base_descent_ticks", s.base_descent_ticks))
 	s.base_ascent_ticks = int(data.get("base_ascent_ticks", s.base_ascent_ticks))
+	s.base_dock_ticks = int(data.get("base_dock_ticks", s.base_dock_ticks))
+	s.base_undock_ticks = int(data.get("base_undock_ticks", s.base_undock_ticks))
 	return s

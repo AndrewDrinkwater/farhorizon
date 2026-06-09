@@ -79,7 +79,7 @@ static func available(context: Dictionary) -> Dictionary:
 		"belay": in_transit,
 		"all_stop": in_transit,
 		"dock": location == Location.HOLDING and can_dock_here and not busy,
-		"undock": location == Location.DOCKED,
+		"undock": location == Location.DOCKED and not busy,
 		"scan": is_contact and in_range and tier == Sensors.Tier.BLIP and not busy,
 		"land": location == Location.HOLDING and landable_here and not busy,
 		"take_off": landed and not in_transition,

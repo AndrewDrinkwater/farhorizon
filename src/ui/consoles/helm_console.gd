@@ -80,6 +80,12 @@ var _ti_rm: TReadout
 var _ti_status: TReadout
 var _ti_route: TReadout
 
+# Transition indicators (ADR 0033): shown only during a timed transition.
+var _transition_panel: TPanel
+var _alt_indicator: AltitudeIndicator
+var _dock_indicator: DockIndicator
+var _tick_accum: float = 0.0  # speed-scaled seconds since the last tick (smooth progress)
+
 
 func _ready() -> void:
 	# Fill the parent explicitly: a plain-Control parent doesn't lay us out, and
@@ -98,6 +104,7 @@ func _ready() -> void:
 	_build_scale_toggle()
 	_build_flight_status()
 	_build_target_info()
+	_build_transition_indicators()  # altitude / dock approach (ADR 0033)
 	_build_inset()        # focus inset draws over the panels (ADR 0022)
 	_connect_bus()
 	_refresh_all()
@@ -337,6 +344,57 @@ func _build_target_info() -> void:
 	c.add_child(_ti_status)
 	_ti_route = TReadout.new("HELM_TI_ROUTE")
 	c.add_child(_ti_route)
+
+
+# --- Transition indicators (ADR 0033) ---
+
+## A centred panel holding the altitude gauge (descent/ascent) and the dock approach
+## bar (dock/undock); shown only during the matching transition.
+func _build_transition_indicators() -> void:
+	_transition_panel = TPanel.new("")
+	add_child(_transition_panel)
+	_place(_transition_panel, 0.5, 0.0, 0.5, 0.0, -130.0, 56.0, 130.0, 320.0)
+	_transition_panel.visible = false
+	var c := _transition_panel.content()
+	_alt_indicator = AltitudeIndicator.new()
+	c.add_child(_alt_indicator)
+	_dock_indicator = DockIndicator.new()
+	c.add_child(_dock_indicator)
+
+
+## Drive the active indicator each frame with smooth (sub-tick) progress; hide the
+## panel when no transition is running.
+func _process(delta: float) -> void:
+	_tick_accum += delta * SimClock.get_speed()
+	_update_transition_indicators()
+
+
+func _update_transition_indicators() -> void:
+	if _transition_panel == null:
+		return
+	var st := _flight_state
+	var body := _resolve_body(GameState.ship.location_body_id)
+	if st == FlightCore.State.DESCENDING or st == FlightCore.State.ASCENDING:
+		_transition_panel.visible = true
+		_alt_indicator.visible = true
+		_dock_indicator.visible = false
+		_alt_indicator.configure(body.atmosphere_atm if body != null else 0.0,
+			_transition_progress(), st == FlightCore.State.DESCENDING)
+	elif st == FlightCore.State.DOCKING or st == FlightCore.State.UNDOCKING:
+		_transition_panel.visible = true
+		_alt_indicator.visible = false
+		_dock_indicator.visible = true
+		_dock_indicator.configure(_transition_progress(), st == FlightCore.State.UNDOCKING)
+	else:
+		_transition_panel.visible = false
+
+
+## Fraction through the current timed transition, smoothed by the sub-tick accum.
+func _transition_progress() -> float:
+	var o: Dictionary = GameState.ship.current_order
+	var total := maxf(1.0, float(o.get("ticks_total", 1)))
+	var done := total - float(o.get("ticks_left", total))
+	return clampf((done + _tick_accum / SimClock.SECONDS_PER_TICK) / total, 0.0, 1.0)
 
 
 # --- Nav contacts directory (ADR 0032) ---
@@ -607,6 +665,7 @@ func _on_flight_state_changed(state: int) -> void:
 
 func _on_tick() -> void:
 	# Geometry changes as the ship moves: keep preview + status current.
+	_tick_accum = 0.0  # restart the sub-tick accumulator (smooth transition progress)
 	_refresh_preview()
 	_refresh_status()
 
@@ -866,10 +925,10 @@ func _context() -> Dictionary:
 	}
 
 
-## A timed surface transition (land/take-off/move) is under way — Helm is busy.
+## A timed transition (land/take-off/move, or dock/undock) is under way — busy.
 func _in_transition() -> bool:
 	var t := String(GameState.ship.current_order.get("type", ""))
-	return t == "land" or t == "take_off" or t == "surface_move"
+	return t in ["land", "take_off", "surface_move", "dock", "undock"]
 
 
 ## Is there a surface site to Move to other than where we are? Open Landing ("")

@@ -82,10 +82,15 @@ func test_dock_at_station_refuels_to_capacity() -> void:
 	GameState.ship.reaction_mass = 12.0
 	watch_signals(EventBus)
 	EventBus.order_issued.emit({"type": "dock"})
+	assert_signal_emitted(EventBus, "order_acknowledged", "dock acknowledged")
+	# Dock is timed now (ADR 0033): refuel completes on arrival, after the ticks.
+	for i in range(20):
+		if GameState.ship.location == Travel.Location.DOCKED:
+			break
+		EventBus.sim_tick.emit(i + 1)
 	assert_eq(GameState.ship.location, Travel.Location.DOCKED, "docked")
 	assert_eq(GameState.ship.reaction_mass, GameState.ship.max_reaction_mass, "tank refilled")
 	assert_signal_emitted(EventBus, "fuel_changed", "refuel announced on the bus")
-	assert_signal_emitted(EventBus, "order_acknowledged", "dock acknowledged")
 
 
 func test_dock_rejected_in_open_space() -> void:
