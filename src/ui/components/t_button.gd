@@ -15,6 +15,15 @@ func setup(label_key: String, on_press: Callable) -> TButton:
 	return self
 
 
+## Like setup() but with already-resolved/dynamic text (e.g. a composed directory
+## row), not a tr() key. The caller localizes the text.
+func setup_text(label: String, on_press: Callable) -> TButton:
+	text = label
+	_on_press = on_press
+	pressed.connect(_emit)
+	return self
+
+
 func _emit() -> void:
 	if _on_press.is_valid():
 		_on_press.call()

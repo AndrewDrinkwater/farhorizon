@@ -54,6 +54,14 @@ var _scale_switch: CheckButton  # context toggle above the Course Order box (orr
 var _scale_caption: Label
 var _pip_readout: TReadout      # between-pip distance/time legend (ADR 0019)
 var _action_buttons: Dictionary = {}  # order id:String -> TButton
+var _cluster_boxes: Dictionary = {}   # cluster name:String -> VBoxContainer (ADR 0032)
+
+# Nav contacts directory (ADR 0032): a filterable hierarchy of bodies + contacts.
+var _dir_list: VBoxContainer
+var _dir_category: int = 0  # 0 all · 1 bodies · 2 contacts
+var _dir_tier: int = 0      # 0 all · 1 blip · 2 identified (contacts)
+var _dir_in_range: bool = false
+var _dir_filter_buttons: Dictionary = {}  # "cat:0" etc. -> Button
 
 # Flight Status widgets
 var _status_light: TLight
@@ -85,6 +93,8 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE  # let map clicks through; panels still catch theirs
 	_build_stage()        # nav views first → drawn behind the panels (ADR 0031)
 	_build_course_order()
+	_build_controls()     # clustered action buttons (ADR 0032)
+	_build_directory()    # nav contacts directory (ADR 0032)
 	_build_scale_toggle()
 	_build_flight_status()
 	_build_target_info()
@@ -205,30 +215,6 @@ func _build_course_order() -> void:
 	_pip_readout = TReadout.new("HELM_PIP")
 	c.add_child(_pip_readout)
 
-	var row1 := HBoxContainer.new()
-	row1.add_theme_constant_override("separation", 4)
-	c.add_child(row1)
-	row1.add_child(_make_action("lay_in", "HELM_LAY_IN_COURSE", _lay_in_course))
-	row1.add_child(_make_action("engage", "HELM_ENGAGE", _engage))
-	row1.add_child(_make_action("belay", "HELM_BELAY", _belay))
-
-	var row2 := HBoxContainer.new()
-	row2.add_theme_constant_override("separation", 4)
-	c.add_child(row2)
-	row2.add_child(_make_action("all_stop", "HELM_ALL_STOP", _all_stop))
-	row2.add_child(_make_action("dock", "HELM_DOCK", _dock))
-	row2.add_child(_make_action("undock", "HELM_UNDOCK", _undock))
-	row2.add_child(_make_action("scan", "HELM_SCAN", _scan))
-	row2.add_child(_make_action("focus", "HELM_FOCUS", _focus))
-	row2.add_child(_make_action("clear_course", "HELM_CLEAR_COURSE", _clear_route))
-
-	var row3 := HBoxContainer.new()
-	row3.add_theme_constant_override("separation", 4)
-	c.add_child(row3)
-	row3.add_child(_make_action("land", "HELM_LAND", _land))
-	row3.add_child(_make_action("take_off", "HELM_TAKE_OFF", _take_off))
-	row3.add_child(_make_action("move", "HELM_MOVE", _move))
-
 	# Landing-site picker (ADR 0030): Open Landing + the body's sites; shown only when
 	# holding at a landable body or landed. Rebuilt when that context changes.
 	_site_picker = HBoxContainer.new()
@@ -237,6 +223,47 @@ func _build_course_order() -> void:
 	c.add_child(_site_picker)
 
 	_refresh_burn_buttons()
+
+
+## Controls panel (ADR 0032): actions in labelled clusters — Flight / Docking /
+## Surface / Sensors. A whole cluster hides when it doesn't apply (HelmGroups);
+## buttons within a visible cluster grey via Travel.available. Bottom-centre band.
+func _build_controls() -> void:
+	var panel := TPanel.new("HELM_CONTROLS")
+	add_child(panel)
+	_place(panel, 0.0, 1.0, 1.0, 1.0, 400.0, -210.0, -400.0, -16.0)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 16)
+	panel.content().add_child(row)
+	_add_cluster(row, "flight", "HELM_GRP_FLIGHT", [
+		["lay_in", "HELM_LAY_IN_COURSE", _lay_in_course], ["engage", "HELM_ENGAGE", _engage],
+		["belay", "HELM_BELAY", _belay], ["all_stop", "HELM_ALL_STOP", _all_stop],
+		["clear_course", "HELM_CLEAR_COURSE", _clear_route],
+	])
+	_add_cluster(row, "docking", "HELM_GRP_DOCKING", [
+		["dock", "HELM_DOCK", _dock], ["undock", "HELM_UNDOCK", _undock],
+	])
+	_add_cluster(row, "surface", "HELM_GRP_SURFACE", [
+		["land", "HELM_LAND", _land], ["take_off", "HELM_TAKE_OFF", _take_off],
+		["move", "HELM_MOVE", _move],
+	])
+	_add_cluster(row, "sensors", "HELM_GRP_SENSORS", [
+		["scan", "HELM_SCAN", _scan], ["focus", "HELM_FOCUS", _focus],
+	])
+
+
+## One labelled cluster: a header over its buttons, stored so it can hide wholesale.
+func _add_cluster(parent: HBoxContainer, name: String, header_key: String, actions: Array) -> void:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	parent.add_child(box)
+	var header := Label.new()
+	header.text = tr(header_key)
+	header.add_theme_color_override("font_color", Palette.TEXT_DIM)
+	box.add_child(header)
+	for a: Array in actions:
+		box.add_child(_make_action(a[0], a[1], a[2]))
+	_cluster_boxes[name] = box
 
 
 ## A toggle switch above the Course Order box that flips the orrery scale mode
@@ -310,6 +337,160 @@ func _build_target_info() -> void:
 	c.add_child(_ti_status)
 	_ti_route = TReadout.new("HELM_TI_ROUTE")
 	c.add_child(_ti_route)
+
+
+# --- Nav contacts directory (ADR 0032) ---
+
+## A filterable hierarchy of all targets (charted bodies + detected contacts) down
+## the left edge; selecting an entry drives nav_target_selected → Target Info + plot.
+func _build_directory() -> void:
+	var panel := TPanel.new("HELM_DIRECTORY")
+	add_child(panel)
+	_place(panel, 0.0, 0.0, 0.0, 1.0, 16.0, 56.0, 348.0, -352.0)
+	var c := panel.content()
+
+	var cat_row := HBoxContainer.new()
+	cat_row.add_theme_constant_override("separation", 4)
+	c.add_child(cat_row)
+	cat_row.add_child(_dir_filter("cat:0", "HELM_DIR_ALL", _set_category.bind(0)))
+	cat_row.add_child(_dir_filter("cat:1", "HELM_DIR_BODIES", _set_category.bind(1)))
+	cat_row.add_child(_dir_filter("cat:2", "HELM_DIR_CONTACTS", _set_category.bind(2)))
+
+	var tier_row := HBoxContainer.new()
+	tier_row.add_theme_constant_override("separation", 4)
+	c.add_child(tier_row)
+	tier_row.add_child(_dir_filter("tier:0", "HELM_DIR_TIER_ALL", _set_tier.bind(0)))
+	tier_row.add_child(_dir_filter("tier:1", "HELM_DIR_TIER_BLIP", _set_tier.bind(1)))
+	tier_row.add_child(_dir_filter("tier:2", "HELM_DIR_TIER_ID", _set_tier.bind(2)))
+
+	var rng := CheckButton.new()
+	rng.text = tr("HELM_DIR_IN_RANGE")
+	rng.toggled.connect(func(p: bool) -> void: _dir_in_range = p; _refresh_directory())
+	c.add_child(rng)
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	c.add_child(scroll)
+	_dir_list = VBoxContainer.new()
+	_dir_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_dir_list)
+
+	_refresh_filter_chips()
+	_refresh_directory()
+
+
+func _dir_filter(key: String, label_key: String, on_press: Callable) -> Button:
+	var b := TButton.new().setup(label_key, on_press)
+	_dir_filter_buttons[key] = b
+	return b
+
+
+func _set_category(n: int) -> void:
+	_dir_category = n
+	_refresh_filter_chips()
+	_refresh_directory()
+
+
+func _set_tier(n: int) -> void:
+	_dir_tier = n
+	_refresh_filter_chips()
+	_refresh_directory()
+
+
+## Highlight the active filter chips (accent + arrow — shape, not colour alone).
+func _refresh_filter_chips() -> void:
+	for key: String in _dir_filter_buttons:
+		var parts := key.split(":")
+		var on := (parts[0] == "cat" and int(parts[1]) == _dir_category) \
+			or (parts[0] == "tier" and int(parts[1]) == _dir_tier)
+		_dir_filter_buttons[key].modulate = Palette.ACCENT if on else Color.WHITE
+
+
+## Rebuild the directory list from the system + live detection state, filtered.
+func _refresh_directory() -> void:
+	if _dir_list == null:
+		return
+	for child: Node in _dir_list.get_children():
+		child.queue_free()
+	var system := TypeRegistry.get_system(GameState.system.system_id)
+	if system == null:
+		return
+	if _dir_category != 2:  # bodies (all / bodies-only)
+		_dir_add_bodies(system)
+	if _dir_category != 1:  # contacts (all / contacts-only)
+		_dir_add_contacts(system)
+
+
+## Bodies as a hierarchy: star → planets/stations → moons (parent-relative, ADR 0018).
+func _dir_add_bodies(system: SystemData) -> void:
+	for star: BodyData in system.bodies:
+		if star.kind != BodyData.Kind.STAR:
+			continue
+		_dir_try_entry(star, 0)
+	for body: BodyData in system.bodies:
+		if body.kind == BodyData.Kind.STAR or body.parent_id != "":
+			continue
+		_dir_try_entry(body, 1)
+		for moon: BodyData in system.bodies:
+			if moon.parent_id == body.id:
+				_dir_try_entry(moon, 2)
+
+
+## Add a body row if it passes the in-range filter (bodies are charted → no tier).
+func _dir_try_entry(body: BodyData, depth: int) -> void:
+	if _dir_in_range and GameState.ship.position.distance_to(body.position) > GameState.ship.sensor_range:
+		return
+	var glyph := _body_kind_glyph(body.kind)
+	_dir_entry(body.id, "%s %s" % [glyph, tr(body.name_key)], depth)
+
+
+func _dir_add_contacts(system: SystemData) -> void:
+	var header := Label.new()
+	header.text = tr("HELM_DIR_CONTACTS")
+	header.add_theme_color_override("font_color", Palette.TEXT_DIM)
+	_dir_list.add_child(header)
+	for contact: ContactData in system.contacts:
+		var tier := GameState.contacts.tier_of(contact.id)
+		if tier == Sensors.Tier.UNDETECTED:
+			continue  # only what we're actually picking up
+		if _dir_tier == 1 and tier != Sensors.Tier.BLIP:
+			continue
+		if _dir_tier == 2 and tier != Sensors.Tier.IDENTIFIED:
+			continue
+		if _dir_in_range and GameState.ship.position.distance_to(contact.position) > GameState.ship.sensor_range:
+			continue
+		var identified := tier == Sensors.Tier.IDENTIFIED
+		var glyph := "◆" if identified else "•?"  # shape channel for tier (ADR 0012)
+		var name := tr(contact.name_key) if identified else tr("NAV_CONTACT_UNKNOWN")
+		_dir_entry(contact.id, "%s %s" % [glyph, name], 1)
+
+
+## One selectable row; indents by depth; highlights the current selection.
+func _dir_entry(id: String, label: String, depth: int) -> void:
+	var b := TButton.new().setup_text("    ".repeat(depth) + label, _on_directory_pick.bind(id))
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if id == _sel_id and _sel_kind != Travel.TargetKind.NONE:
+		b.modulate = Palette.ACCENT  # selected entry marked
+	_dir_list.add_child(b)
+
+
+## Directory selection drives the same path as a map click (ADR 0032).
+func _on_directory_pick(id: String) -> void:
+	EventBus.nav_target_selected.emit(id)
+
+
+func _body_kind_glyph(kind: int) -> String:
+	match kind:
+		BodyData.Kind.STAR:
+			return "★"
+		BodyData.Kind.STATION:
+			return "⛢"
+		BodyData.Kind.MOON:
+			return "◖"
+		_:
+			return "●"
 
 
 # --- Bus wiring ---
@@ -639,7 +820,12 @@ func _refresh_actions() -> void:
 	if _action_buttons.has("clear_course"):
 		_action_buttons["clear_course"].disabled = _sel_kind == Travel.TargetKind.NONE \
 			and _route_waypoints.is_empty() and not _has_course()
+	# Hide whole clusters that don't apply to the situation (ADR 0032).
+	var groups := HelmGroups.visible_groups(_context())
+	for name: String in _cluster_boxes:
+		_cluster_boxes[name].visible = bool(groups.get(name, true))
 	_refresh_site_picker()
+	_refresh_directory()
 
 
 ## Does the current selection (a body) have any moons? (ADR 0022)
