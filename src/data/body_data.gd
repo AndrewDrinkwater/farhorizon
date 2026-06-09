@@ -19,3 +19,11 @@ enum Kind { STAR, PLANET, STATION, MOON }
 @export var tint: Color = Color.WHITE  # secondary channel only (ADR 0012)
 @export var can_dock: bool = false
 @export var can_refuel: bool = false
+
+## Landing & surface (ADR 0029/0030).
+@export var landable: bool = false
+## Surface pressure in Earth atmospheres (0 = vacuum, 1 = Earth, ~90 = Venus). The
+## scientific source of truth; the display class is derived (LandingMath).
+@export var atmosphere_atm: float = 0.0
+@export var wild_touchdown: Vector2 = Vector2.ZERO  # Open Landing surface pos (su)
+@export var surface_locations: Array[SurfaceLocationData] = []  # named sites/POIs (su)

@@ -19,7 +19,10 @@ a mission clock. Being rebuilt deliberately from scratch; α0.1 = "The Ship Flie
 - `docs/zones.md` — authored spatial regions (hazards/fields/no-go/triggers) +
   course obstacle routing: data shape, pure-core contracts, example content
   (ADR 0026/0027; **built**).
-- `docs/adr/0001..0028` — one decision per file. **If you change a decision,
+- `docs/landing.md` — land/take-off, atmosphere (Earth atm), surface locations +
+  planetary navigation: data shapes, `LandingMath`/`SurfaceMath` contracts,
+  example content (ADR 0029/0030; designed, not built).
+- `docs/adr/0001..0030` — one decision per file. **If you change a decision,
   add/supersede an ADR.**
 - `DEVLOG.md` — append a short entry per work session (newest on top).
 

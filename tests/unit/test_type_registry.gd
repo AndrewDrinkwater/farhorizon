@@ -113,6 +113,32 @@ func test_calder_zone_effects_authored() -> void:
 	assert_true(bool(by_id["drift_signal"].effects.get("once", false)), "drift trigger is one-shot")
 
 
+func test_calder_landable_bodies_and_sites() -> void:
+	var system := TypeRegistry.get_system("calder")
+	var by_id: Dictionary = {}
+	for body: BodyData in system.bodies:
+		by_id[body.id] = body
+	assert_true(by_id["halcyon"].landable, "Halcyon is landable")
+	assert_almost_eq(by_id["halcyon"].atmosphere_atm, 1.1, 0.001, "Standard atmosphere")
+	assert_eq(by_id["halcyon"].surface_locations.size(), 2, "camp + dig site")
+	assert_true(by_id["toll"].landable, "the moon is landable (vacuum)")
+	assert_eq(by_id["toll"].surface_locations.size(), 0, "Open Landing only")
+	assert_false(by_id["bastion"].landable, "the gas giant has no surface")
+	assert_almost_eq(by_id["bastion"].atmosphere_atm, 30.0, 0.001, "but a crushing atmosphere value")
+	var site: SurfaceLocationData = by_id["halcyon"].surface_locations[0]
+	assert_ne(site.name_key, "", "site has a name key")
+	assert_eq(site.kind, SurfaceLocationData.Kind.SITE, "camp is a SITE")
+
+
+func test_sol_verdant_is_landable_with_a_base() -> void:
+	var system := TypeRegistry.get_system("sol")
+	for body: BodyData in system.bodies:
+		if body.id == "verdant":
+			assert_true(body.landable)
+			assert_eq(body.surface_locations.size(), 1, "the outpost")
+			assert_eq(body.surface_locations[0].kind, SurfaceLocationData.Kind.BASE)
+
+
 func test_unknown_system_is_null() -> void:
 	assert_null(TypeRegistry.get_system("does_not_exist"), "missing id -> null")
 	assert_false(TypeRegistry.has_system("does_not_exist"), "has_system false for missing")

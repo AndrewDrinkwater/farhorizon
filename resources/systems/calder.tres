@@ -4,6 +4,28 @@
 [ext_resource type="Script" path="res://src/data/contact_data.gd" id="2_contact"]
 [ext_resource type="Script" path="res://src/data/system_data.gd" id="3_system"]
 [ext_resource type="Script" path="res://src/data/zone_data.gd" id="4_zone"]
+[ext_resource type="Script" path="res://src/data/surface_location_data.gd" id="5_surf"]
+
+[sub_resource type="Resource" id="S_halcyon_camp"]
+script = ExtResource("5_surf")
+id = "halcyon_camp"
+name_key = "LOC_HALCYON_CAMP"
+kind = 1
+surface_position = Vector2(120, -80)
+
+[sub_resource type="Resource" id="S_halcyon_dig"]
+script = ExtResource("5_surf")
+id = "halcyon_dig"
+name_key = "LOC_HALCYON_DIG"
+kind = 3
+surface_position = Vector2(-150, 60)
+
+[sub_resource type="Resource" id="S_ember_vent"]
+script = ExtResource("5_surf")
+id = "ember_vent"
+name_key = "LOC_EMBER_VENT"
+kind = 3
+surface_position = Vector2(90, 40)
 
 [sub_resource type="Resource" id="B_calder"]
 script = ExtResource("1_body")
@@ -20,6 +42,9 @@ name_key = "BODY_EMBER"
 position = Vector2(470, 171)
 radius = 38.0
 tint = Color(0.85, 0.45, 0.3, 1)
+landable = true
+atmosphere_atm = 0.2
+surface_locations = Array[ExtResource("5_surf")]([SubResource("S_ember_vent")])
 
 [sub_resource type="Resource" id="B_halcyon"]
 script = ExtResource("1_body")
@@ -28,6 +53,9 @@ name_key = "BODY_HALCYON"
 position = Vector2(-1034, -376)
 radius = 50.0
 tint = Color(0.45, 0.7, 0.68, 1)
+landable = true
+atmosphere_atm = 1.1
+surface_locations = Array[ExtResource("5_surf")]([SubResource("S_halcyon_camp"), SubResource("S_halcyon_dig")])
 
 [sub_resource type="Resource" id="B_toll"]
 script = ExtResource("1_body")
@@ -38,6 +66,8 @@ position = Vector2(-1011, -357)
 parent_id = "halcyon"
 radius = 16.0
 tint = Color(0.6, 0.6, 0.62, 1)
+landable = true
+atmosphere_atm = 0.0
 
 [sub_resource type="Resource" id="B_cradle"]
 script = ExtResource("1_body")
@@ -65,6 +95,7 @@ name_key = "BODY_BASTION"
 position = Vector2(3000, 5196)
 radius = 90.0
 tint = Color(0.8, 0.7, 0.5, 1)
+atmosphere_atm = 30.0
 
 [sub_resource type="Resource" id="B_hearth"]
 script = ExtResource("1_body")

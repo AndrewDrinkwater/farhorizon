@@ -3,6 +3,14 @@
 [ext_resource type="Script" path="res://src/data/body_data.gd" id="1_is64w"]
 [ext_resource type="Script" path="res://src/data/contact_data.gd" id="2_wps71"]
 [ext_resource type="Script" path="res://src/data/system_data.gd" id="3_4bpnw"]
+[ext_resource type="Script" path="res://src/data/surface_location_data.gd" id="4_surf"]
+
+[sub_resource type="Resource" id="S_verdant_outpost"]
+script = ExtResource("4_surf")
+id = "verdant_outpost"
+name_key = "LOC_VERDANT_OUTPOST"
+kind = 2
+surface_position = Vector2(-100, -100)
 
 [sub_resource type="Resource" id="Resource_0i7mv"]
 script = ExtResource("1_is64w")
@@ -19,6 +27,9 @@ name_key = "BODY_VERDANT"
 position = Vector2(1000, 0)
 radius = 48.0
 tint = Color(0.4, 0.78, 0.52, 1)
+landable = true
+atmosphere_atm = 0.9
+surface_locations = Array[ExtResource("4_surf")]([SubResource("S_verdant_outpost")])
 
 [sub_resource type="Resource" id="Resource_fnbma"]
 script = ExtResource("1_is64w")

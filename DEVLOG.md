@@ -4,6 +4,33 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-09 — Design: landing + surface navigation (ADR 0029/0030)
+
+Design session (no code). The ship can now land, take off, and move between
+surface sites — a local nav context under the system.
+
+- **Landable bodies + atmosphere (ADR 0029):** `BodyData.landable` +
+  `atmosphere_atm` (scientific — surface pressure in Earth atmospheres; chemical
+  make-up deferred). `Travel.Location.LANDED`; HOLDING → Land → LANDED → Take Off
+  → HOLDING. Descent/ascent are timed transitions (time only for now). Duration
+  is a **modifiable stat** — base ship stat × a factor chain, atmosphere first;
+  mass/skill/equipment are future factors appended to the chain (seeds the
+  modifiable-stat pattern; only landing built now). Base stats on `ShipState`
+  until `HullData` exists.
+- **Surface locations + planetary nav (ADR 0030):** `SurfaceLocationData`
+  (wild/site/base/poi + surface coords) on `BodyData`; a generic **Open Landing**
+  always available; **Move** between sites = `distance_su / surface_speed` on the
+  clock. A dedicated **SurfaceView** (surface analog of the orrery) shown while
+  landed; the shell swaps orrery ↔ surface on land/take-off. Seeds bases/POIs and
+  shuttle ops later.
+- `docs/landing.md`: data shapes, `LandingMath`/`SurfaceMath` contracts + tests,
+  example landable bodies/sites, 6-step build order. New units: atmosphere (atm),
+  surface units (su).
+
+Not built yet — ready to hand to Claude Code.
+
+---
+
 ## 2026-06-09 — Fix: laid-in solid-line bug; +4 AU range ring
 
 - **Bug:** after engage → select new target → belay, the new (uncommitted) plot
