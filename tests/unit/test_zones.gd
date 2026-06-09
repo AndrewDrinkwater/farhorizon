@@ -34,6 +34,32 @@ func test_polygon_inside_outside() -> void:
 	assert_false(Zones.contains(ZoneData.Shape.POLYGON, Vector2.ZERO, 0.0, 0.0, sq, Vector2(150.0, 50.0)), "outside")
 
 
+func test_anchor_resolution_offsets_geometry() -> void:
+	var system := TypeRegistry.get_system("calder")
+	var bastion: BodyData = null
+	for b: BodyData in system.bodies:
+		if b.id == "bastion":
+			bastion = b
+	var belt: ZoneData = null
+	for z: ZoneData in system.zones:
+		if z.id == "bastion_belt":
+			belt = z
+	assert_eq(Zones.world_center(belt, system), bastion.position, "band centred on its anchor body")
+	# A free zone is unaffected.
+	var veil: ZoneData = null
+	for z: ZoneData in system.zones:
+		if z.id == "veil_cloud":
+			veil = z
+	assert_eq(Zones.world_points(veil, system), veil.points, "free polygon keeps absolute points")
+
+
+func test_ring_points_lie_on_the_circle() -> void:
+	var pts := Zones.ring_points(Vector2(10.0, 20.0), 100.0, 16)
+	assert_eq(pts.size(), 16)
+	for p: Vector2 in pts:
+		assert_almost_eq(p.distance_to(Vector2(10.0, 20.0)), 100.0, 0.01, "on the boundary")
+
+
 func test_polygon_degenerate_is_never_inside() -> void:
 	var two := PackedVector2Array([Vector2(0, 0), Vector2(10, 0)])
 	assert_false(Zones.contains(ZoneData.Shape.POLYGON, Vector2.ZERO, 0.0, 0.0, two, Vector2(5.0, 0.0)),

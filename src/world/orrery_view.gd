@@ -178,6 +178,7 @@ func _draw() -> void:
 	if _system == null:
 		return
 	var proj := _project_bodies()
+	_draw_zones()  # beneath bodies/contacts (ADR 0026); warped through the projection
 	_draw_rings(proj)
 	_draw_course()
 	for body: BodyData in _system.bodies:
@@ -228,6 +229,62 @@ func _draw_body(body: BodyData, at: Vector2) -> void:
 	if body.kind != BodyData.Kind.STAR and not _composing():
 		var ticks := FlightMath.eta_ticks(GameState.ship.position.distance_to(body.position), _burn)
 		_draw_label(label_at + Vector2(0.0, LABEL_SIZE + 1.0), _format_duration(ticks), TIME_COLOR)
+
+
+## Authored zones (ADR 0026), warped through the projection like everything else —
+## outline + a name/category label (shape + label, not colour alone, ADR 0012).
+func _draw_zones() -> void:
+	for zone: ZoneData in _system.zones:
+		var t := zone.tint
+		var col := Color(t.r, t.g, t.b, 0.5)
+		match zone.shape:
+			ZoneData.Shape.CIRCLE:
+				_draw_real_loop(Zones.ring_points(Zones.world_center(zone, _system), zone.radius), col)
+			ZoneData.Shape.BAND:
+				var c := Zones.world_center(zone, _system)
+				_draw_real_loop(Zones.ring_points(c, zone.radius), col)
+				_draw_real_loop(Zones.ring_points(c, zone.inner_radius), Color(t.r, t.g, t.b, 0.28))
+			ZoneData.Shape.POLYGON:
+				_draw_real_loop(Zones.world_points(zone, _system), col)
+		var label := "%s · %s" % [tr(zone.name_key), tr(_zone_category_key(zone.category))]
+		_draw_label(_zone_label_pos(zone), label, Color(t.r, t.g, t.b, 0.9))
+
+
+## Map real-space loop points through the projection and draw a closed outline.
+func _draw_real_loop(real_points: PackedVector2Array, color: Color) -> void:
+	if real_points.size() < 2:
+		return
+	var screen := PackedVector2Array()
+	for p: Vector2 in real_points:
+		screen.append(_project_real(p))
+	screen.append(screen[0])
+	draw_polyline(screen, color, 1.0, true)
+
+
+func _zone_label_pos(zone: ZoneData) -> Vector2:
+	if zone.shape == ZoneData.Shape.POLYGON:
+		var pts := Zones.world_points(zone, _system)
+		if pts.is_empty():
+			return _project_real(Zones.world_center(zone, _system))
+		var sum := Vector2.ZERO
+		for p: Vector2 in pts:
+			sum += p
+		return _project_real(sum / float(pts.size()))
+	return _project_real(Zones.world_center(zone, _system))
+
+
+func _zone_category_key(category: int) -> String:
+	match category:
+		ZoneData.Category.HAZARD:
+			return "ZONE_CAT_HAZARD"
+		ZoneData.Category.NOGO:
+			return "ZONE_CAT_NOGO"
+		ZoneData.Category.FACILITY:
+			return "ZONE_CAT_FACILITY"
+		ZoneData.Category.TRIGGER:
+			return "ZONE_CAT_TRIGGER"
+		_:
+			return "ZONE_CAT_FIELD"
 
 
 ## Mark a planet that has moons (ADR 0022): a thin halo ring + one pip per moon

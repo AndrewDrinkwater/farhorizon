@@ -31,8 +31,8 @@ func _on_sim_tick() -> void:
 	var pos: Vector2 = GameState.ship.position
 	var now: Dictionary = {}
 	for zone: ZoneData in system.zones:
-		var center := _world_center(zone, system)
-		var points := _world_points(zone, system)
+		var center := Zones.world_center(zone, system)
+		var points := Zones.world_points(zone, system)
 		if Zones.contains(zone.shape, center, zone.radius, zone.inner_radius, points, pos):
 			now[zone.id] = true
 			if not _inside.has(zone.id):
@@ -53,30 +53,3 @@ func _on_enter(zone: ZoneData) -> void:
 			return
 		GameState.zones.mark_fired(zone.id)
 	EventBus.zone_trigger_fired.emit(zone.id, event_id)
-
-
-# --- Anchor resolution (ADR 0018): geometry is offset by the anchor body ---
-
-func _anchor_offset(zone: ZoneData, system: SystemData) -> Vector2:
-	if zone.anchor_body_id == "":
-		return Vector2.ZERO
-	for body: BodyData in system.bodies:
-		if body.id == zone.anchor_body_id:
-			return body.position
-	return Vector2.ZERO
-
-
-func _world_center(zone: ZoneData, system: SystemData) -> Vector2:
-	return _anchor_offset(zone, system) + zone.center
-
-
-func _world_points(zone: ZoneData, system: SystemData) -> PackedVector2Array:
-	if zone.shape != ZoneData.Shape.POLYGON:
-		return PackedVector2Array()
-	var offset := _anchor_offset(zone, system)
-	if offset == Vector2.ZERO:
-		return zone.points
-	var out := PackedVector2Array()
-	for p: Vector2 in zone.points:
-		out.append(p + offset)
-	return out

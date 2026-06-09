@@ -98,6 +98,7 @@ func _draw() -> void:
 	draw_arc(_center, radius, 0.0, TAU, 96, RING_COLOR, 1.5, true)
 	draw_arc(_center, radius * 0.5, 0.0, TAU, 80, Color(RING_COLOR, 0.18), 1.0, true)
 
+	_draw_zones()  # beneath bodies/contacts (ADR 0026); true shapes at this scale
 	_draw_isochrones()
 	_draw_course()
 	for body: BodyData in _system.bodies:
@@ -140,6 +141,61 @@ func _draw_body(body: BodyData, at: Vector2) -> void:
 		_:
 			draw_circle(at, PLANET_PX, body.tint)
 	_label(at + Vector2(_marker_px(body.kind) + 4.0, 4.0), tr(body.name_key), Palette.TEXT)
+
+
+## Authored zones (ADR 0026): true shapes at this scale — outline + name/category
+## label (shape + label, not colour alone, ADR 0012).
+func _draw_zones() -> void:
+	for zone: ZoneData in _system.zones:
+		var t := zone.tint
+		var col := Color(t.r, t.g, t.b, 0.5)
+		match zone.shape:
+			ZoneData.Shape.CIRCLE:
+				_draw_real_loop(Zones.ring_points(Zones.world_center(zone, _system), zone.radius), col)
+			ZoneData.Shape.BAND:
+				var c := Zones.world_center(zone, _system)
+				_draw_real_loop(Zones.ring_points(c, zone.radius), col)
+				_draw_real_loop(Zones.ring_points(c, zone.inner_radius), Color(t.r, t.g, t.b, 0.28))
+			ZoneData.Shape.POLYGON:
+				_draw_real_loop(Zones.world_points(zone, _system), col)
+		_label(_zone_label_pos(zone), "%s · %s" % [tr(zone.name_key), tr(_zone_category_key(zone.category))],
+			Color(t.r, t.g, t.b, 0.9))
+
+
+func _draw_real_loop(real_points: PackedVector2Array, color: Color) -> void:
+	if real_points.size() < 2:
+		return
+	var screen := PackedVector2Array()
+	for p: Vector2 in real_points:
+		screen.append(_to_screen(p))
+	screen.append(screen[0])
+	draw_polyline(screen, color, 1.0, true)
+
+
+func _zone_label_pos(zone: ZoneData) -> Vector2:
+	if zone.shape == ZoneData.Shape.POLYGON:
+		var pts := Zones.world_points(zone, _system)
+		if pts.is_empty():
+			return _to_screen(Zones.world_center(zone, _system))
+		var sum := Vector2.ZERO
+		for p: Vector2 in pts:
+			sum += p
+		return _to_screen(sum / float(pts.size()))
+	return _to_screen(Zones.world_center(zone, _system))
+
+
+func _zone_category_key(category: int) -> String:
+	match category:
+		ZoneData.Category.HAZARD:
+			return "ZONE_CAT_HAZARD"
+		ZoneData.Category.NOGO:
+			return "ZONE_CAT_NOGO"
+		ZoneData.Category.FACILITY:
+			return "ZONE_CAT_FACILITY"
+		ZoneData.Category.TRIGGER:
+			return "ZONE_CAT_TRIGGER"
+		_:
+			return "ZONE_CAT_FIELD"
 
 
 ## Isochrone rings (ADR 0019): concentric "how long to anything" circles for the
