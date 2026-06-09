@@ -18,6 +18,9 @@ const SCOPE_FILL := 0.42   # fraction of the half-min screen the sensor circle f
 const SCOPE_MARGIN := 1.18 # show a little beyond sensor range
 const RING_COLOR := Color(0.35, 0.45, 0.58, 0.35)
 const SHIP_TINT := Color(0.9, 0.95, 1.0)
+const COURSE_NOGO_COLOR := Palette.STATUS_ALERT     # course crosses a no-go (ADR 0028)
+const COURSE_HAZARD_COLOR := Palette.STATUS_CAUTION  # course crosses a hazard
+const WAYPOINT_HANDLE_PX := 5.0  # grabbable waypoint handle radius
 const TIME_COLOR := Palette.STATUS_NOMINAL  # isochrone rings (ADR 0019); paired with a label
 const ISOCHRONE_RING_COLOR := Color(Palette.STATUS_NOMINAL, 0.30)
 ## Durations (in-game minutes) drawn as isochrone rings for the selected burn.
@@ -102,8 +105,10 @@ func _draw() -> void:
 
 	_draw_zones()  # beneath bodies/contacts (ADR 0026); true shapes at this scale
 	_draw_isochrones()
-	_draw_preview_route()
-	_draw_course()
+	if _under_way():
+		_draw_course()
+	else:
+		_draw_plotted_course()
 	for body: BodyData in _system.bodies:
 		_draw_body(body, _to_screen(body.position))
 	for contact: ContactData in _system.contacts:
@@ -223,13 +228,43 @@ func _draw_course() -> void:
 		return
 	# True scale → straight legs through the route's waypoints to the destination
 	# (ADR 0020/0027). Ship maps to the scope centre.
-	var route := _course_route(order)
+	_draw_route(_course_route(order), 3.0)
+
+
+## The editable plotted course (compose route), coloured by obstruction (ADR 0028);
+## waypoint handles drawn fatter so they can be grabbed.
+func _draw_plotted_course() -> void:
+	if _preview_route.size() >= 2:
+		_draw_route(_preview_route, WAYPOINT_HANDLE_PX)
+
+
+## Draw a true-scale route (straight legs) coloured by its worst obstruction.
+func _draw_route(route: PackedVector2Array, handle_px: float) -> void:
+	if route.size() < 2:
+		return
+	var color := _route_color(route)
 	var screen := PackedVector2Array()
 	for p: Vector2 in route:
 		screen.append(_to_screen(p))
-	draw_polyline(screen, Palette.ACCENT, 1.5, true)
+	draw_polyline(screen, color, 1.5, true)
 	for i in range(1, route.size() - 1):
-		draw_circle(_to_screen(route[i]), 3.0, Palette.ACCENT)  # waypoint dots
+		draw_circle(_to_screen(route[i]), handle_px, color)
+
+
+func _route_color(route: PackedVector2Array) -> Color:
+	if _system == null:
+		return Palette.ACCENT
+	match Zones.route_block(_system, route):
+		Zones.Block.NOGO:
+			return COURSE_NOGO_COLOR
+		Zones.Block.HAZARD:
+			return COURSE_HAZARD_COLOR
+		_:
+			return Palette.ACCENT
+
+
+func _under_way() -> bool:
+	return bool(GameState.ship.current_order.get("engaged", false))
 
 
 ## The laid-in route as real points: ship → waypoints → destination.
@@ -241,21 +276,6 @@ func _course_route(order: Dictionary) -> PackedVector2Array:
 		route.append(wp)
 	route.append(dest)
 	return route
-
-
-## Compose-time route preview (ADR 0027), drawn dim until a course is laid in.
-func _draw_preview_route() -> void:
-	if _preview_route.size() < 2:
-		return
-	if String(GameState.ship.current_order.get("type", "")) == "course":
-		return
-	var dim := Color(Palette.ACCENT.r, Palette.ACCENT.g, Palette.ACCENT.b, 0.4)
-	var screen := PackedVector2Array()
-	for p: Vector2 in _preview_route:
-		screen.append(_to_screen(p))
-	draw_polyline(screen, dim, 1.5, true)
-	for i in range(1, _preview_route.size() - 1):
-		draw_circle(_to_screen(_preview_route[i]), 3.0, dim)
 
 
 func _draw_ship() -> void:

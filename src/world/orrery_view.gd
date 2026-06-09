@@ -25,6 +25,9 @@ const MOON_RING_COLOR := Color(0.35, 0.45, 0.58, 0.18)  # fainter than planet ri
 const SHIP_TINT := Color(0.9, 0.95, 1.0)
 const TIME_COLOR := Palette.STATUS_NOMINAL  # travel-time annotations (ADR 0019); paired with text
 const SATELLITE_COLOR := Palette.TEXT_DIM  # "has moons" halo + pips (ADR 0022)
+const COURSE_NOGO_COLOR := Palette.STATUS_ALERT    # course crosses a no-go (ADR 0028)
+const COURSE_HAZARD_COLOR := Palette.STATUS_CAUTION  # course crosses a hazard
+const WAYPOINT_HANDLE_PX := 5.0  # grabbable waypoint handle radius
 const SATELLITE_PIP_CAP := 4              # max moon pips drawn around the halo
 const PIP_TICKS := 30   # one course-line pip per this many in-game minutes (tuning)
 const PIP_PX := 5.0     # half-length of a pip tick, px
@@ -186,8 +189,10 @@ func _draw() -> void:
 	var proj := _project_bodies()
 	_draw_zones()  # beneath bodies/contacts (ADR 0026); warped through the projection
 	_draw_rings(proj)
-	_draw_preview_route()
-	_draw_course()
+	if _under_way():
+		_draw_course()           # the engaged flight path (current_order)
+	else:
+		_draw_plotted_course()   # the editable plot (compose route), coloured by obstruction
 	for body: BodyData in _system.bodies:
 		_draw_body(body, proj[body.id])
 	_draw_contacts()
@@ -337,14 +342,47 @@ func _draw_course() -> void:
 	# adaptively-subdivided curve (the log projection bends a straight real path —
 	# sharpest near the star — and uniform sampling would kink it).
 	var route := _course_route(order)
-	_draw_route_legs(route, Palette.ACCENT)
+	var color := _route_color(route)
+	_draw_route_legs(route, color)
 	for i in range(route.size() - 1):
 		_draw_course_time(route[i], route[i + 1])  # time pips per leg
 	for i in range(1, route.size() - 1):
-		draw_circle(_project_course_point(route[i]), 3.0, Palette.ACCENT)  # waypoint dots
+		draw_circle(_project_course_point(route[i]), 3.0, color)  # waypoint dots
 	var target: BodyData = _by_id.get(String(order.get("target_id", "")), null)
 	var ring: float = (_marker_px(target.kind) + 5.0) if target != null else 8.0
-	draw_arc(_project_course_point(route[route.size() - 1]), ring, 0.0, TAU, 24, Palette.ACCENT, 1.0, true)
+	draw_arc(_project_course_point(route[route.size() - 1]), ring, 0.0, TAU, 24, color, 1.0, true)
+
+
+## The editable plotted course (compose route), coloured by obstruction (ADR 0028):
+## red through a no-go, amber through a hazard, accent when clear. Waypoint handles
+## are drawn fatter so they can be grabbed and dragged.
+func _draw_plotted_course() -> void:
+	if _preview_route.size() < 2:
+		return
+	var color := _route_color(_preview_route)
+	_draw_route_legs(_preview_route, color)
+	for i in range(_preview_route.size() - 1):
+		_draw_course_time(_preview_route[i], _preview_route[i + 1])
+	for i in range(1, _preview_route.size() - 1):
+		draw_circle(_project_course_point(_preview_route[i]), WAYPOINT_HANDLE_PX, color)
+	draw_arc(_project_course_point(_preview_route[_preview_route.size() - 1]), 8.0, 0.0, TAU, 24, color, 1.0, true)
+
+
+## Course colour from the worst obstruction along the route (ADR 0028).
+func _route_color(route: PackedVector2Array) -> Color:
+	if _system == null:
+		return Palette.ACCENT
+	match Zones.route_block(_system, route):
+		Zones.Block.NOGO:
+			return COURSE_NOGO_COLOR
+		Zones.Block.HAZARD:
+			return COURSE_HAZARD_COLOR
+		_:
+			return Palette.ACCENT
+
+
+func _under_way() -> bool:
+	return bool(GameState.ship.current_order.get("engaged", false))
 
 
 ## The laid-in route as real points: ship → waypoints → destination.
@@ -362,18 +400,6 @@ func _draw_route_legs(route: PackedVector2Array, color: Color) -> void:
 		var pts := PackedVector2Array([_project_course_point(route[i])])
 		_subdivide_course(route[i], route[i + 1], 0.0, 1.0, 0, pts)
 		draw_polyline(pts, color, 1.5, true)
-
-
-## Compose-time route preview (ADR 0027): drawn dim while plotting, before a course
-## is laid in (the engaged course then draws over the same points via _draw_course).
-func _draw_preview_route() -> void:
-	if _preview_route.size() < 2:
-		return
-	if String(GameState.ship.current_order.get("type", "")) == "course":
-		return
-	_draw_route_legs(_preview_route, Color(Palette.ACCENT.r, Palette.ACCENT.g, Palette.ACCENT.b, 0.4))
-	for i in range(1, _preview_route.size() - 1):
-		draw_circle(_project_course_point(_preview_route[i]), 3.0, Color(Palette.ACCENT.r, Palette.ACCENT.g, Palette.ACCENT.b, 0.5))
 
 
 ## True while the captain is composing or flying a course (a target/point selected,
