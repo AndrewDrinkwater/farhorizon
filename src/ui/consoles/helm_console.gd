@@ -206,6 +206,15 @@ func _connect_bus() -> void:
 	EventBus.order_acknowledged.connect(_on_order_acknowledged)
 	EventBus.order_rejected.connect(_on_order_rejected)
 	EventBus.game_state_loaded.connect(_refresh_all)
+	EventBus.system_changed.connect(_on_system_changed)
+
+
+## A new system loaded (ADR 0024): the old selection is gone — clear it and refresh.
+func _on_system_changed(_system_id: String) -> void:
+	_sel_kind = Travel.TargetKind.NONE
+	_sel_id = ""
+	_sel_point = Vector2.ZERO
+	_refresh_all()
 
 
 func _on_target_selected(target_id: String) -> void:

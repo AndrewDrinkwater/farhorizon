@@ -79,8 +79,8 @@ A persistent console; the mission clock keeps running while it's open.
 |--------|-----------|-------|
 | **Nav Plot** (main) | map node + overlays | System map: star, static bodies, ship marker, current course line + destination, sensor range. Click a body to target it. |
 | **Course Order** | `TPanel` + `TButton` + burn selector + `TReadout` | Selected target, burn intensity, ETA + reaction-mass preview, **Lay In Course**; plus All Stop, Establish Orbit / Dock, Belay. |
-| **Flight Status** | `TReadout` + `TGauge` + `TLight` | Flight state (named, not colour-only — ADR 0012), ETA / arrival time, distance to target, current speed, reaction mass + burn rate. |
-| **Order Log** | `TList` | The helm's acknowledgments and recent order history, newest first. |
+| **Flight Status** | `TReadout` + `TGauge` + `TLight` | Flight state (named, not colour-only — ADR 0012), ETA / arrival time, distance, reaction mass — plus a **transient acknowledgment line** (the ship's "Course laid in", fades after a few seconds; ADR 0025). |
+| **Target Information** | `TPanel` + `TReadout`s | Details of the current selection, burn-aware (ADR 0025): a body's type/parent/distance/ETA/RM/reachability/dock+refuel/has-moons; a contact's tier (Blip/Identified)/kind/scan availability; a waypoint's bearing/ETA. Replaces the old Order Log. |
 
 Time controls (pause / 1× / 2× / 4×) live in the persistent terminal shell, not
 inside Helm — they're the captain's *watch* speed, not a flight order.

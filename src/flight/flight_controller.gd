@@ -23,6 +23,7 @@ func _ready() -> void:
 	EventBus.order_issued.connect(_on_order_issued)
 	EventBus.order_belayed.connect(_on_belay)
 	EventBus.game_state_loaded.connect(_resync_after_load)
+	EventBus.system_changed.connect(_resync_after_load.unbind(1))  # reset motion for the new system
 	_resync_after_load()
 
 

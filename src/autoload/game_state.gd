@@ -21,6 +21,23 @@ func new_game() -> void:
 	contacts = ContactsState.new()
 
 
+## Switch to a loaded star system (ADR 0024): store the new id, reset the ship to
+## the system's start (clear course, drift in deep space), and reset transient
+## contact discovery. The defined mutation path the SystemLoader/warp drives;
+## authored content stays referenced by id. Fuel is left as-is (warp doesn't refill).
+func load_system(system_data: SystemData) -> void:
+	if system_data == null:
+		return
+	system.system_id = system_data.id
+	ship.position = system_data.ship_start
+	ship.heading = 0.0
+	ship.orbit_angle = 0.0
+	ship.current_order = {}
+	ship.location = Travel.Location.DEEP_SPACE
+	ship.location_body_id = ""
+	contacts = ContactsState.new()  # nothing discovered in the new system yet
+
+
 ## Serialize the whole tree to a plain Dictionary (SaveManager wraps it with the
 ## version stamps — versioning is SaveManager's concern, not the state's).
 func to_dict() -> Dictionary:

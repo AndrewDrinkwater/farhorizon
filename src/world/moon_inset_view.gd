@@ -42,6 +42,16 @@ func build(system: SystemData) -> void:
 	visible = false
 	EventBus.nav_focus_requested.connect(_on_focus_requested)
 	EventBus.nav_target_selected.connect(func(id: String) -> void: _selected_id = id)
+	EventBus.system_changed.connect(_on_system_changed)
+
+
+## On a system switch (ADR 0024): re-cache the system and close the inset.
+func _on_system_changed(system_id: String) -> void:
+	_system = TypeRegistry.get_system(system_id)
+	_planet = null
+	_moons = []
+	_selected_id = ""
+	visible = false
 
 
 func _on_focus_requested(body_id: String) -> void:

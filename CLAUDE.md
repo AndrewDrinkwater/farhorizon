@@ -16,7 +16,7 @@ a mission clock. Being rebuilt deliberately from scratch; α0.1 = "The Ship Flie
 - `docs/consoles/helm.md` — the first console (flight + navigation).
 - `docs/navigation.md` — the orrery + sensor navigation model with the pure
   `core` function contracts and test outlines (planned for α0.2).
-- `docs/adr/0001..0023` — one decision per file. **If you change a decision,
+- `docs/adr/0001..0025` — one decision per file. **If you change a decision,
   add/supersede an ADR.**
 - `DEVLOG.md` — append a short entry per work session (newest on top).
 

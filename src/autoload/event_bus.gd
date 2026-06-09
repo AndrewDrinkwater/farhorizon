@@ -46,6 +46,11 @@ signal contact_promoted(contact_id: String, tier: int)
 # --- Fuel ---
 signal fuel_changed(pool: int, value: float)
 
+# --- System loading (ADR 0024) — switch the loaded star system at runtime;
+# the seed of warp/multi-system later (which reuses this exact path, gated). ---
+signal system_change_requested(system_id: String)  # intent
+signal system_changed(system_id: String)            # done — nav systems re-init
+
 # --- Lifecycle ---
 signal game_state_loaded()
 signal settings_changed(key: String)

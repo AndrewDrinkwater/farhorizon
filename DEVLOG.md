@@ -4,6 +4,27 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-08 — Design: nav iteration 2 (tooling, 2nd system, target panel)
+
+Design session (no code). Three nav-polish asks from the captain, turned into a
+build plan + ADRs:
+
+- **Runtime system loading + debug console (ADR 0024):** `system_change_requested`
+  / `system_changed` signals and a clean load path (reset ship/course/contacts,
+  rebuild views) — the seed of warp later. A dev-only `DebugConsole` (backtick)
+  driving a `DebugActions` helper: `system <id>`, `refuel`, `tp <body|x y>`.
+- **Helm Target Information panel (ADR 0025):** the Order Log box becomes a
+  burn-aware Target Info panel (body/contact/waypoint details); ship-voice
+  acknowledgments move to a transient line in Flight Status.
+- **Calder Reach (content):** a large second system — 1 star, 8 planets, 6 moons,
+  2 stations, 7 contacts — specced in `docs/navigation.md` to stress the orrery,
+  moon insets, isochrones, and the sensor sweep.
+
+Build order + the full body/contact table are in `docs/navigation.md` ("Nav
+iteration 2"). Not built yet — ready to hand to Claude Code.
+
+---
+
 ## 2026-06-08 — α0.3 nav feel pass (in-engine feedback)
 
 First in-engine drive surfaced five issues; addressed four + added pan/zoom.

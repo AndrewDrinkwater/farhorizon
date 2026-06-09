@@ -242,3 +242,79 @@ slice below). The nav-specific steps that doc folds in, in order:
    confirm ADRs.
 
 Keep pure logic in `core` with green GUT tests before the nodes are called done.
+
+---
+
+## Nav iteration 2 — tooling, a second system, the Target panel
+
+A navigation-polish batch (ADR 0024, ADR 0025 + the content below). Goal: stress
+the nav systems against a dense system, get fast dev iteration, and make the Helm
+read like a nav console.
+
+**Build order:**
+
+1. **Runtime system loading (ADR 0024):** `system_change_requested` /
+   `system_changed` signals + the load handler (validate id, reset ship to
+   `ship_start`, clear course, `DEEP_SPACE`, reset contact discovery, rebuild
+   orrery/tactical/inset). Add the views' rebuild path. GUT the state reset.
+2. **Debug command console (ADR 0024):** `toggle_console` action (backtick); a
+   `DebugConsole` overlay + `DebugActions` helper; commands `help`, `systems`,
+   `system <id>`, `refuel`, `tp <body_id>|<x> <y>`.
+3. **Calder Reach (content, below):** author the second `SystemData` `.tres` +
+   strings. Switch to it via `system calder` and stress the orrery, moon insets,
+   isochrones, sensor sweep.
+4. **Target Information panel (ADR 0025):** replace the Helm Order Log with the
+   burn-aware Target Info panel; move ship-voice acknowledgments to a transient
+   Flight Status line.
+5. Feel pass against Calder Reach (orrery density, moon clustering, contact
+   legibility); DEVLOG; confirm ADRs.
+
+### Calder Reach — the stress-test system (content)
+
+A frontier system, kept in the game and used to stress nav. `WU_PER_AU = 1000`;
+`position = round(AU × 1000 × Vector2(cos θ, sin θ))` with θ from the bearing.
+1 star + 8 planets + 6 moons + 2 stations + 7 contacts. Ship start ≈ 1 AU.
+
+**Charted bodies** (`SystemData.bodies`, `BodyData`):
+
+| id | name key | kind | parent | AU | bearing | dock/refuel |
+|----|----------|------|--------|----|---------|-------------|
+| `calder` | `BODY_CALDER` | STAR | — | 0 | — | — |
+| `ember` | `BODY_EMBER` | PLANET | — | 0.5 | 20° | — |
+| `halcyon` | `BODY_HALCYON` | PLANET | — | 1.1 | 200° | — |
+| `toll` | `BODY_TOLL` | MOON | `halcyon` | +0.03 | 40° | — |
+| `cradle` | `BODY_CRADLE` | PLANET | — | 1.8 | 110° | — |
+| `meridian` | `BODY_MERIDIAN` | STATION | — | 2.4 | 320° | dock + refuel |
+| `bastion` | `BODY_BASTION` | PLANET (gas giant) | — | 6.0 | 60° | — |
+| `hearth` | `BODY_HEARTH` | MOON | `bastion` | +0.04 | 0° | — |
+| `pallid` | `BODY_PALLID` | MOON | `bastion` | +0.06 | 150° | — |
+| `vex` | `BODY_VEX` | MOON | `bastion` | +0.05 | 250° | — |
+| `sable` | `BODY_SABLE` | PLANET | — | 11 | 250° | — |
+| `wane` | `BODY_WANE` | MOON | `sable` | +0.05 | 90° | — |
+| `drift` | `BODY_DRIFT` | PLANET | — | 19 | 140° | — |
+| `calyx` | `BODY_CALYX` | PLANET | — | 30 | 30° | — |
+| `mote` | `BODY_MOTE` | MOON | `calyx` | +0.04 | 200° | — |
+| `greaves` | `BODY_GREAVES` | STATION | — | 38 | 300° | dock + refuel |
+| `thule` | `BODY_THULE` | PLANET | — | 45 | 160° | — |
+
+Moons: `position = parent.position + round(AU_offset × 1000 × Vector2(cos θ,
+sin θ))` (offsets above are small — 30–60 wu — to exercise parent-relative
+projection and inset, ADR 0018/0022). `radius`/`tint` per kind; tint is a
+secondary channel only (ADR 0012).
+
+**Transient contacts** (`SystemData.contacts`, `ContactData`):
+
+| id | name key | kind | AU | bearing |
+|----|----------|------|----|---------|
+| `solane` | `CONTACT_SOLANE` | DERELICT | 3.0 | 80° |
+| `drift9` | `CONTACT_DRIFT9` | PROBE | 1.5 | 190° |
+| `hauler` | `CONTACT_HAULER` | SHIP | 5.0 | 40° |
+| `echovex` | `CONTACT_ECHOVEX` | SIGNAL | 6.2 | 62° |
+| `hollow` | `CONTACT_HOLLOW` | SIGNAL | 7.0 | 210° |
+| `pale` | `CONTACT_PALE` | ANOMALY | 12 | 130° |
+| `cinderfield` | `CONTACT_CINDERFIELD` | DEBRIS | 20 | 150° |
+
+Spread so some sit inside the start sensor range (≈3 AU) and some only reveal as
+you fly the sweep. Add a `SYSTEM_CALDER` system name key and a display name for
+each id above to `localization/strings.csv` (ADR 0010).
+

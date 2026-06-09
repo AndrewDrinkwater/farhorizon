@@ -47,17 +47,7 @@ var _font: Font
 
 
 func build(system: SystemData) -> void:
-	_system = system
 	_font = ThemeDB.fallback_font
-	for body: BodyData in system.bodies:
-		_by_id[body.id] = body
-		if body.kind == BodyData.Kind.STAR:
-			_star_pos = body.position
-		if body.kind == BodyData.Kind.MOON and body.parent_id != "":
-			if not _moons_by_parent.has(body.parent_id):
-				_moons_by_parent[body.parent_id] = []
-			_moons_by_parent[body.parent_id].append(body)
-	_rebuild_params()
 	EventBus.nav_target_selected.connect(_on_target_selected)
 	EventBus.nav_point_selected.connect(_on_point_selected)
 	EventBus.nav_burn_changed.connect(_on_burn_changed)
@@ -65,6 +55,36 @@ func build(system: SystemData) -> void:
 	EventBus.contact_detected.connect(_on_contacts_changed.unbind(1))
 	EventBus.contact_lost.connect(_on_contacts_changed.unbind(1))
 	EventBus.contact_promoted.connect(_on_contacts_changed.unbind(2))
+	EventBus.system_changed.connect(_on_system_changed)
+	_init_system(system)
+
+
+func _on_system_changed(system_id: String) -> void:
+	_init_system(TypeRegistry.get_system(system_id))
+
+
+## (Re)load a system into the view (ADR 0024): rebuild lookups, reset selection +
+## zoom/pan, reframe. Signals are connected once in build(), not here.
+func _init_system(system: SystemData) -> void:
+	_system = system
+	_by_id.clear()
+	_moons_by_parent.clear()
+	_star_pos = Vector2.ZERO
+	_selected_id = ""
+	_has_point_sel = false
+	_zoom = 1.0
+	_pan = Vector2.ZERO
+	if system != null:
+		for body: BodyData in system.bodies:
+			_by_id[body.id] = body
+			if body.kind == BodyData.Kind.STAR:
+				_star_pos = body.position
+			if body.kind == BodyData.Kind.MOON and body.parent_id != "":
+				if not _moons_by_parent.has(body.parent_id):
+					_moons_by_parent[body.parent_id] = []
+				_moons_by_parent[body.parent_id].append(body)
+	_rebuild_params()
+	queue_redraw()
 
 
 func _rebuild_params() -> void:

@@ -37,11 +37,24 @@ var _font: Font
 
 
 func build(system: SystemData) -> void:
-	_system = system
 	_font = ThemeDB.fallback_font
 	EventBus.nav_target_selected.connect(_on_target_selected)
 	EventBus.nav_point_selected.connect(_on_point_selected)
 	EventBus.nav_burn_changed.connect(func(burn: int) -> void: _burn = burn)
+	EventBus.system_changed.connect(_on_system_changed)
+	_init_system(system)
+
+
+func _on_system_changed(system_id: String) -> void:
+	_init_system(TypeRegistry.get_system(system_id))
+
+
+## (Re)load a system into the scope (ADR 0024): reset the system + selection.
+func _init_system(system: SystemData) -> void:
+	_system = system
+	_selected_id = ""
+	_has_point_sel = false
+	queue_redraw()
 
 
 func _on_target_selected(id: String) -> void:

@@ -13,6 +13,7 @@ func _ready() -> void:
 	_prev_pos = GameState.ship.position
 	EventBus.sim_tick.connect(_on_sim_tick)
 	EventBus.game_state_loaded.connect(_on_state_loaded)
+	EventBus.system_changed.connect(_on_state_loaded.unbind(1))  # re-detect from the new start
 
 
 func _on_state_loaded() -> void:
