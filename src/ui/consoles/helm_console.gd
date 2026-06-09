@@ -253,7 +253,16 @@ func _on_system_changed(_system_id: String) -> void:
 	_emit_route()
 
 
+## A laid-in course is committed to a specific route; once the plot changes
+## (new target/point, or a dragged waypoint) it's stale — drop it so the plot
+## reverts to "plotted" (dashed) until re-laid-in (ADR 0028).
+func _invalidate_laid_in() -> void:
+	if not _in_transit() and _has_course():
+		EventBus.order_issued.emit({"type": "clear_course"})
+
+
 func _on_target_selected(target_id: String) -> void:
+	_invalidate_laid_in()
 	_sel_id = target_id
 	_sel_point = Vector2.ZERO
 	_route_waypoints.clear()  # fresh route to the new target (ADR 0027)
@@ -271,6 +280,7 @@ func _on_target_selected(target_id: String) -> void:
 ## An empty-space click (ADR 0020/0028) plots a direct course to that free point.
 ## Route waypoints are now added by dragging the course line (nav_waypoints_set).
 func _on_point_selected(point: Vector2) -> void:
+	_invalidate_laid_in()
 	_sel_kind = Travel.TargetKind.POINT
 	_sel_id = ""
 	_sel_point = point
@@ -282,6 +292,7 @@ func _on_point_selected(point: Vector2) -> void:
 
 ## A nav view dragged the course (ADR 0028): adopt the new waypoint list.
 func _on_waypoints_set(waypoints: PackedVector2Array) -> void:
+	_invalidate_laid_in()  # editing the route un-commits it (reverts to dashed)
 	_route_waypoints.assign(waypoints)
 	_refresh_preview()
 	_refresh_actions()

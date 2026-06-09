@@ -22,6 +22,8 @@ const COURSE_NOGO_COLOR := Palette.STATUS_ALERT     # course crosses a no-go (AD
 const COURSE_HAZARD_COLOR := Palette.STATUS_CAUTION  # course crosses a hazard
 const WAYPOINT_HANDLE_PX := 5.0  # grabbable waypoint handle radius
 const GRAB_PX := 12.0  # cursor distance for grabbing a course leg / waypoint handle
+const DASH_PX := 9.0    # plotted-course dash length / gap (ADR 0028)
+const DASH_GAP_PX := 6.0
 const TIME_COLOR := Palette.STATUS_NOMINAL  # isochrone rings (ADR 0019); paired with a label
 const ISOCHRONE_RING_COLOR := Color(Palette.STATUS_NOMINAL, 0.30)
 ## Durations (in-game minutes) drawn as isochrone rings for the selected burn.
@@ -257,28 +259,60 @@ func _draw_course() -> void:
 	if String(order.get("type", "")) != "course":
 		return
 	# True scale → straight legs through the route's waypoints to the destination
-	# (ADR 0020/0027). Ship maps to the scope centre.
-	_draw_route(_course_route(order), 3.0, Palette.ACCENT)  # engaged → solid accent
+	# (ADR 0020/0027). Ship maps to the scope centre. Engaged → solid.
+	_draw_route(_course_route(order), 3.0, false)
 
 
 ## The editable plotted course (compose route), coloured by obstruction (ADR 0028);
-## waypoint handles drawn fatter so they can be grabbed.
+## dashed until laid in, solid once committed; handles drawn fatter to grab.
 func _draw_plotted_course() -> void:
 	if _preview_route.size() >= 2:
-		_draw_route(_preview_route, WAYPOINT_HANDLE_PX, _plot_clear_color())
+		_draw_route(_preview_route, WAYPOINT_HANDLE_PX, not _has_laid_in_course())
 
 
-## Draw a true-scale route (straight legs) coloured by its worst obstruction.
-func _draw_route(route: PackedVector2Array, handle_px: float, clear_color: Color) -> void:
+## Draw a true-scale route (straight legs) coloured by its worst obstruction;
+## dashed for a plotted course, solid for a committed one (ADR 0028).
+func _draw_route(route: PackedVector2Array, handle_px: float, dashed: bool) -> void:
 	if route.size() < 2:
 		return
-	var color := _route_color(route, clear_color)
+	var color := _route_color(route, Palette.ACCENT)
 	var screen := PackedVector2Array()
 	for p: Vector2 in route:
 		screen.append(_to_screen(p))
-	draw_polyline(screen, color, 1.5, true)
+	if dashed:
+		_draw_dashed(screen, color)
+	else:
+		draw_polyline(screen, color, 1.5, true)
 	for i in range(1, route.size() - 1):
 		draw_circle(_to_screen(route[i]), handle_px, color)
+
+
+## Dash a polyline continuously across its segments (the plotted-course cue).
+func _draw_dashed(points: PackedVector2Array, color: Color) -> void:
+	var on := true
+	var pen := 0.0
+	for i in range(points.size() - 1):
+		var a := points[i]
+		var b := points[i + 1]
+		var seg := a.distance_to(b)
+		if seg < 0.001:
+			continue
+		var dir := (b - a) / seg
+		var pos := 0.0
+		while pos < seg:
+			var span := (DASH_PX if on else DASH_GAP_PX) - pen
+			var step := minf(span, seg - pos)
+			if on:
+				draw_line(a + dir * pos, a + dir * (pos + step), color, 1.5, true)
+			pos += step
+			pen += step
+			if pen >= (DASH_PX if on else DASH_GAP_PX) - 0.001:
+				pen = 0.0
+				on = not on
+
+
+func _has_laid_in_course() -> bool:
+	return String(GameState.ship.current_order.get("type", "")) == "course"
 
 
 func _route_color(route: PackedVector2Array, clear_color: Color) -> Color:
@@ -293,11 +327,6 @@ func _route_color(route: PackedVector2Array, clear_color: Color) -> Color:
 			return clear_color
 
 
-## Laid-in course (current_order set) reads solid; a merely plotted one dimmer.
-func _plot_clear_color() -> Color:
-	if String(GameState.ship.current_order.get("type", "")) == "course":
-		return Palette.ACCENT
-	return Color(Palette.ACCENT, 0.5)
 
 
 func _under_way() -> bool:

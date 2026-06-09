@@ -29,6 +29,8 @@ const COURSE_NOGO_COLOR := Palette.STATUS_ALERT    # course crosses a no-go (ADR
 const COURSE_HAZARD_COLOR := Palette.STATUS_CAUTION  # course crosses a hazard
 const WAYPOINT_HANDLE_PX := 5.0  # grabbable waypoint handle radius
 const GRAB_PX := 12.0  # cursor distance for grabbing a course leg / waypoint handle
+const DASH_PX := 9.0    # plotted-course dash length / gap (ADR 0028)
+const DASH_GAP_PX := 6.0
 const SATELLITE_PIP_CAP := 4              # max moon pips drawn around the halo
 const PIP_TICKS := 30   # one course-line pip per this many in-game minutes (tuning)
 const PIP_PX := 5.0     # half-length of a pip tick, px
@@ -345,8 +347,8 @@ func _draw_course() -> void:
 	# adaptively-subdivided curve (the log projection bends a straight real path —
 	# sharpest near the star — and uniform sampling would kink it).
 	var route := _course_route(order)
-	var color := _route_color(route, Palette.ACCENT)  # engaged → solid accent
-	_draw_route_legs(route, color)
+	var color := _route_color(route, Palette.ACCENT)  # engaged → solid
+	_draw_route_legs(route, color, false)
 	for i in range(route.size() - 1):
 		_draw_course_time(route[i], route[i + 1])  # time pips per leg
 	for i in range(1, route.size() - 1):
@@ -362,8 +364,11 @@ func _draw_course() -> void:
 func _draw_plotted_course() -> void:
 	if _preview_route.size() < 2:
 		return
-	var color := _route_color(_preview_route, _plot_clear_color())
-	_draw_route_legs(_preview_route, color)
+	# Plotted (not yet laid in) draws dashed; laid in draws solid — clearly distinct
+	# (ADR 0028). Obstruction red/amber still applies to either.
+	var laid_in := _has_laid_in_course()
+	var color := _route_color(_preview_route, Palette.ACCENT)
+	_draw_route_legs(_preview_route, color, not laid_in)
 	for i in range(_preview_route.size() - 1):
 		_draw_course_time(_preview_route[i], _preview_route[i + 1])
 	for i in range(1, _preview_route.size() - 1):
@@ -385,12 +390,6 @@ func _route_color(route: PackedVector2Array, clear_color: Color) -> Color:
 			return clear_color
 
 
-## Clear-course colour: a laid-in course (current_order set) reads solid; a merely
-## plotted one reads dimmer — a subtle "not committed yet" cue (ADR 0028).
-func _plot_clear_color() -> Color:
-	if String(GameState.ship.current_order.get("type", "")) == "course":
-		return Palette.ACCENT
-	return Color(Palette.ACCENT, 0.5)
 
 
 func _under_way() -> bool:
@@ -406,12 +405,45 @@ func _course_route(order: Dictionary) -> PackedVector2Array:
 	return route
 
 
-## Draw each route leg as the projected, adaptively-flattened curve.
-func _draw_route_legs(route: PackedVector2Array, color: Color) -> void:
+## Draw each route leg as the projected, adaptively-flattened curve — solid for a
+## committed (laid-in/engaged) course, dashed for a plotted one (ADR 0028).
+func _draw_route_legs(route: PackedVector2Array, color: Color, dashed: bool) -> void:
 	for i in range(route.size() - 1):
 		var pts := PackedVector2Array([_project_course_point(route[i])])
 		_subdivide_course(route[i], route[i + 1], 0.0, 1.0, 0, pts)
-		draw_polyline(pts, color, 1.5, true)
+		if dashed:
+			_draw_dashed(pts, color)
+		else:
+			draw_polyline(pts, color, 1.5, true)
+
+
+## Dash a polyline (continuous across its segments) — the "plotted, not committed"
+## cue for a course (ADR 0028).
+func _draw_dashed(points: PackedVector2Array, color: Color) -> void:
+	var on := true
+	var pen := 0.0
+	for i in range(points.size() - 1):
+		var a := points[i]
+		var b := points[i + 1]
+		var seg := a.distance_to(b)
+		if seg < 0.001:
+			continue
+		var dir := (b - a) / seg
+		var pos := 0.0
+		while pos < seg:
+			var span := (DASH_PX if on else DASH_GAP_PX) - pen
+			var step := minf(span, seg - pos)
+			if on:
+				draw_line(a + dir * pos, a + dir * (pos + step), color, 1.5, true)
+			pos += step
+			pen += step
+			if pen >= (DASH_PX if on else DASH_GAP_PX) - 0.001:
+				pen = 0.0
+				on = not on
+
+
+func _has_laid_in_course() -> bool:
+	return String(GameState.ship.current_order.get("type", "")) == "course"
 
 
 ## True while the captain is composing or flying a course (a target/point selected,

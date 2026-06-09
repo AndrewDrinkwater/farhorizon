@@ -91,6 +91,14 @@ func test_mode_toggle_drives_rings_in_tactical_view() -> void:
 	assert_signal_not_emitted(EventBus, "nav_scale_changed", "and not the orrery scale")
 
 
+func test_changing_the_plot_uncommits_a_laid_in_course() -> void:
+	GameState.ship.current_order = {"type": "course", "engaged": false}  # a laid-in course
+	watch_signals(EventBus)
+	EventBus.nav_target_selected.emit("rubicon")  # re-plot to a new target
+	var order: Dictionary = get_signal_parameters(EventBus, "order_issued", 0)[0]
+	assert_eq(order.get("type"), "clear_course", "editing the plot drops the stale laid-in course")
+
+
 func test_arrival_clears_the_plot() -> void:
 	EventBus.nav_target_selected.emit("verdant")
 	assert_ne(_helm._sel_kind, Travel.TargetKind.NONE, "a course is plotted")

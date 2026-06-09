@@ -13,9 +13,10 @@ Three nav refinements from in-engine feedback. **170 GUT tests green; boots clea
   so dragging a detour didn't move the cost yet "insufficient RM" fired with no
   figure shown. Now over the whole route (`_plotted_distance`), with the ⚠ when it
   exceeds the tank.
-- **Plotted vs laid-in colour:** a merely-plotted course draws dim (accent @ 0.5);
-  once laid in (current_order set) it's solid accent — obstruction red/amber still
-  override. (ADR 0028)
+- **Plotted vs laid-in style:** a merely-plotted course draws **dashed**, a laid-in
+  one **solid** (obstruction red/amber still applies to either) — clearly distinct.
+  Editing a laid-in course (new target/point or a dragged waypoint) un-commits it
+  back to dashed until re-laid-in. (ADR 0028)
 - **Context toggle (ADR 0021 amended):** the Schematic/True-scale switch is inert
   in the scope (always true-scale), so the one Helm toggle is retargeted by the
   active view (`nav_view_changed`): orrery → scale; scope → ring mode, swapping the
