@@ -11,6 +11,7 @@ const OrreryViewScene := preload("res://src/world/orrery_view.gd")
 const TacticalViewScene := preload("res://src/world/tactical_view.gd")
 const MoonInsetViewScene := preload("res://src/world/moon_inset_view.gd")
 const DebugOverlay := preload("res://src/ui/components/debug_overlay.gd")
+const DebugConsoleScene := preload("res://src/ui/components/debug_console.gd")
 
 ## Starting system until a save/new-game flow chooses one.
 const DEFAULT_SYSTEM_ID: String = "sol"
@@ -27,6 +28,7 @@ func _ready() -> void:
 	add_child(SaveController.new())     # F5 save / F9 load
 	_build_ui()
 	add_child(DebugOverlay.new())
+	add_child(DebugConsoleScene.new())  # ` to toggle (ADR 0024)
 
 	print("[Far Horizon] boot — v%s, schema %d · system '%s' (Space=pause, [/]=speed, T=tactical, F3=debug, F5/F9=save/load)" % [
 		GameVersion.GAME_VERSION, GameVersion.SAVE_SCHEMA_VERSION, GameState.system.system_id,
