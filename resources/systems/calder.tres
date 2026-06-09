@@ -1,0 +1,216 @@
+[gd_resource type="Resource" script_class="SystemData" format=3]
+
+[ext_resource type="Script" path="res://src/data/body_data.gd" id="1_body"]
+[ext_resource type="Script" path="res://src/data/contact_data.gd" id="2_contact"]
+[ext_resource type="Script" path="res://src/data/system_data.gd" id="3_system"]
+
+[sub_resource type="Resource" id="B_calder"]
+script = ExtResource("1_body")
+id = "calder"
+name_key = "BODY_CALDER"
+kind = 0
+radius = 130.0
+tint = Color(1, 0.8, 0.35, 1)
+
+[sub_resource type="Resource" id="B_ember"]
+script = ExtResource("1_body")
+id = "ember"
+name_key = "BODY_EMBER"
+position = Vector2(470, 171)
+radius = 38.0
+tint = Color(0.85, 0.45, 0.3, 1)
+
+[sub_resource type="Resource" id="B_halcyon"]
+script = ExtResource("1_body")
+id = "halcyon"
+name_key = "BODY_HALCYON"
+position = Vector2(-1034, -376)
+radius = 50.0
+tint = Color(0.45, 0.7, 0.68, 1)
+
+[sub_resource type="Resource" id="B_toll"]
+script = ExtResource("1_body")
+id = "toll"
+name_key = "BODY_TOLL"
+kind = 3
+position = Vector2(-1011, -357)
+parent_id = "halcyon"
+radius = 16.0
+tint = Color(0.6, 0.6, 0.62, 1)
+
+[sub_resource type="Resource" id="B_cradle"]
+script = ExtResource("1_body")
+id = "cradle"
+name_key = "BODY_CRADLE"
+position = Vector2(-616, 1691)
+radius = 46.0
+tint = Color(0.5, 0.65, 0.45, 1)
+
+[sub_resource type="Resource" id="B_meridian"]
+script = ExtResource("1_body")
+id = "meridian"
+name_key = "BODY_MERIDIAN"
+kind = 2
+position = Vector2(1839, -1543)
+radius = 22.0
+tint = Color(0.8, 0.8, 0.92, 1)
+can_dock = true
+can_refuel = true
+
+[sub_resource type="Resource" id="B_bastion"]
+script = ExtResource("1_body")
+id = "bastion"
+name_key = "BODY_BASTION"
+position = Vector2(3000, 5196)
+radius = 90.0
+tint = Color(0.8, 0.7, 0.5, 1)
+
+[sub_resource type="Resource" id="B_hearth"]
+script = ExtResource("1_body")
+id = "hearth"
+name_key = "BODY_HEARTH"
+kind = 3
+position = Vector2(3040, 5196)
+parent_id = "bastion"
+radius = 18.0
+tint = Color(0.7, 0.68, 0.6, 1)
+
+[sub_resource type="Resource" id="B_pallid"]
+script = ExtResource("1_body")
+id = "pallid"
+name_key = "BODY_PALLID"
+kind = 3
+position = Vector2(2948, 5226)
+parent_id = "bastion"
+radius = 16.0
+tint = Color(0.7, 0.7, 0.75, 1)
+
+[sub_resource type="Resource" id="B_vex"]
+script = ExtResource("1_body")
+id = "vex"
+name_key = "BODY_VEX"
+kind = 3
+position = Vector2(2983, 5149)
+parent_id = "bastion"
+radius = 15.0
+tint = Color(0.55, 0.6, 0.6, 1)
+
+[sub_resource type="Resource" id="B_sable"]
+script = ExtResource("1_body")
+id = "sable"
+name_key = "BODY_SABLE"
+position = Vector2(-3762, -10337)
+radius = 52.0
+tint = Color(0.55, 0.6, 0.82, 1)
+
+[sub_resource type="Resource" id="B_wane"]
+script = ExtResource("1_body")
+id = "wane"
+name_key = "BODY_WANE"
+kind = 3
+position = Vector2(-3762, -10287)
+parent_id = "sable"
+radius = 16.0
+tint = Color(0.6, 0.62, 0.7, 1)
+
+[sub_resource type="Resource" id="B_drift"]
+script = ExtResource("1_body")
+id = "drift"
+name_key = "BODY_DRIFT"
+position = Vector2(-14555, 12213)
+radius = 44.0
+tint = Color(0.5, 0.55, 0.7, 1)
+
+[sub_resource type="Resource" id="B_calyx"]
+script = ExtResource("1_body")
+id = "calyx"
+name_key = "BODY_CALYX"
+position = Vector2(25981, 15000)
+radius = 60.0
+tint = Color(0.7, 0.6, 0.8, 1)
+
+[sub_resource type="Resource" id="B_mote"]
+script = ExtResource("1_body")
+id = "mote"
+name_key = "BODY_MOTE"
+kind = 3
+position = Vector2(25943, 14986)
+parent_id = "calyx"
+radius = 15.0
+tint = Color(0.6, 0.6, 0.6, 1)
+
+[sub_resource type="Resource" id="B_greaves"]
+script = ExtResource("1_body")
+id = "greaves"
+name_key = "BODY_GREAVES"
+kind = 2
+position = Vector2(19000, -32909)
+radius = 22.0
+tint = Color(0.78, 0.82, 0.9, 1)
+can_dock = true
+can_refuel = true
+
+[sub_resource type="Resource" id="B_thule"]
+script = ExtResource("1_body")
+id = "thule"
+name_key = "BODY_THULE"
+position = Vector2(-42286, 15391)
+radius = 50.0
+tint = Color(0.5, 0.6, 0.85, 1)
+
+[sub_resource type="Resource" id="C_solane"]
+script = ExtResource("2_contact")
+id = "solane"
+name_key = "CONTACT_SOLANE"
+kind = 1
+position = Vector2(521, 2954)
+
+[sub_resource type="Resource" id="C_drift9"]
+script = ExtResource("2_contact")
+id = "drift9"
+name_key = "CONTACT_DRIFT9"
+kind = 4
+position = Vector2(-1477, -260)
+
+[sub_resource type="Resource" id="C_hauler"]
+script = ExtResource("2_contact")
+id = "hauler"
+name_key = "CONTACT_HAULER"
+kind = 0
+position = Vector2(3830, 3214)
+
+[sub_resource type="Resource" id="C_echovex"]
+script = ExtResource("2_contact")
+id = "echovex"
+name_key = "CONTACT_ECHOVEX"
+kind = 3
+position = Vector2(2911, 5474)
+
+[sub_resource type="Resource" id="C_hollow"]
+script = ExtResource("2_contact")
+id = "hollow"
+name_key = "CONTACT_HOLLOW"
+kind = 3
+position = Vector2(-6062, -3500)
+
+[sub_resource type="Resource" id="C_pale"]
+script = ExtResource("2_contact")
+id = "pale"
+name_key = "CONTACT_PALE"
+kind = 2
+position = Vector2(-7714, 9193)
+
+[sub_resource type="Resource" id="C_cinderfield"]
+script = ExtResource("2_contact")
+id = "cinderfield"
+name_key = "CONTACT_CINDERFIELD"
+kind = 5
+position = Vector2(-17320, 10000)
+
+[resource]
+script = ExtResource("3_system")
+id = "calder"
+name_key = "SYSTEM_CALDER"
+bodies = Array[ExtResource("1_body")]([SubResource("B_calder"), SubResource("B_ember"), SubResource("B_halcyon"), SubResource("B_toll"), SubResource("B_cradle"), SubResource("B_meridian"), SubResource("B_bastion"), SubResource("B_hearth"), SubResource("B_pallid"), SubResource("B_vex"), SubResource("B_sable"), SubResource("B_wane"), SubResource("B_drift"), SubResource("B_calyx"), SubResource("B_mote"), SubResource("B_greaves"), SubResource("B_thule")])
+contacts = Array[ExtResource("2_contact")]([SubResource("C_solane"), SubResource("C_drift9"), SubResource("C_hauler"), SubResource("C_echovex"), SubResource("C_hollow"), SubResource("C_pale"), SubResource("C_cinderfield")])
+ship_start = Vector2(1000, 0)

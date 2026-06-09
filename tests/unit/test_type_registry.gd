@@ -53,6 +53,40 @@ func test_bodies_carry_name_keys() -> void:
 		assert_ne(body.name_key, "", "body '%s' has a name key" % body.id)
 
 
+func test_calder_reach_loads_at_the_specced_density() -> void:
+	var system := TypeRegistry.get_system("calder")
+	assert_not_null(system, "Calder Reach is authored and loaded")
+	assert_eq(system.id, "calder")
+	assert_eq(system.bodies.size(), 17, "1 star + 8 planets + 6 moons + 2 stations")
+	assert_eq(system.contacts.size(), 7, "seven transient contacts")
+	var stars := 0
+	var planets := 0
+	var moons := 0
+	var stations := 0
+	for body: BodyData in system.bodies:
+		match body.kind:
+			BodyData.Kind.STAR: stars += 1
+			BodyData.Kind.PLANET: planets += 1
+			BodyData.Kind.MOON: moons += 1
+			BodyData.Kind.STATION: stations += 1
+		assert_ne(body.name_key, "", "body '%s' has a name key" % body.id)
+	assert_eq(stars, 1, "one star")
+	assert_eq(planets, 8, "eight planets (incl. the gas giant)")
+	assert_eq(moons, 6, "six moons")
+	assert_eq(stations, 2, "two stations")
+
+
+func test_calder_moons_reference_real_parents() -> void:
+	var system := TypeRegistry.get_system("calder")
+	var ids: Dictionary = {}
+	for body: BodyData in system.bodies:
+		ids[body.id] = body
+	for body: BodyData in system.bodies:
+		if body.kind == BodyData.Kind.MOON:
+			assert_true(ids.has(body.parent_id), "moon '%s' parent '%s' exists" % [body.id, body.parent_id])
+			assert_ne(body.kind, ids[body.parent_id].kind, "a moon's parent isn't itself a moon")
+
+
 func test_unknown_system_is_null() -> void:
 	assert_null(TypeRegistry.get_system("does_not_exist"), "missing id -> null")
 	assert_false(TypeRegistry.has_system("does_not_exist"), "has_system false for missing")

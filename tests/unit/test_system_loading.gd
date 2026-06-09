@@ -50,6 +50,18 @@ func test_loader_loads_a_valid_system_and_announces() -> void:
 	assert_signal_emitted(EventBus, "system_changed", "announced the change")
 
 
+func test_loader_switches_to_calder_reach() -> void:
+	var loader := SystemLoader.new()
+	add_child_autofree(loader)
+	GameState.system.system_id = "sol"
+	watch_signals(EventBus)
+	EventBus.system_change_requested.emit("calder")
+	assert_eq(GameState.system.system_id, "calder", "switched to the second system")
+	assert_eq(GameState.ship.position, TypeRegistry.get_system("calder").ship_start,
+		"ship reset to Calder's start")
+	assert_signal_emitted(EventBus, "system_changed")
+
+
 func test_loader_ignores_an_unknown_system() -> void:
 	var loader := SystemLoader.new()
 	add_child_autofree(loader)
