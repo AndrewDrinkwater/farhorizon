@@ -49,6 +49,12 @@ func _on_order_issued(order: Dictionary) -> void:
 			_scan(order)
 		"clear_course":
 			_clear_course()
+		"land":
+			_land(order)
+		"take_off":
+			_take_off()
+		"move":
+			_move(order)
 		_:
 			EventBus.order_rejected.emit("ORDER_REJECT_UNKNOWN")
 
@@ -231,12 +237,125 @@ func _undock() -> void:
 	_notify_context()
 
 
+# --- Surface: land / take off / move (ADR 0029/0030), timed transitions ---
+
+## Land at a surface site (or Open Landing, site_id ""). Begins a timed descent;
+## duration is the modifiable land stat × atmosphere factor.
+func _land(order: Dictionary) -> void:
+	if _is_under_way() or _in_transition():
+		EventBus.order_rejected.emit("ORDER_REJECT_UNDERWAY")
+		return
+	if GameState.ship.location != Travel.Location.HOLDING:
+		EventBus.order_rejected.emit("ORDER_REJECT_NOT_HOLDING")
+		return
+	var body := _resolve_body(GameState.ship.location_body_id)
+	if body == null or not body.landable:
+		EventBus.order_rejected.emit("ORDER_REJECT_NOT_LANDABLE")
+		return
+	var ticks: int = LandingMath.modified_ticks(GameState.ship.base_descent_ticks,
+		[LandingMath.atmosphere_factor(body.atmosphere_atm)])
+	GameState.ship.current_order = {
+		"type": "land", "site_id": String(order.get("site_id", "")),
+		"ticks_total": maxi(1, ticks), "ticks_left": maxi(1, ticks),
+	}
+	_set_state(FlightCore.State.DESCENDING)
+	_acknowledge("VOICE_SHIP_DESCENDING")
+	_notify_context()
+
+
+## Take off from the surface back to the body's holding orbit (timed ascent).
+func _take_off() -> void:
+	if GameState.ship.location != Travel.Location.LANDED or _in_transition():
+		EventBus.order_rejected.emit("ORDER_REJECT_NOT_LANDED")
+		return
+	var body := _resolve_body(GameState.ship.location_body_id)
+	var atm: float = body.atmosphere_atm if body != null else 0.0
+	var ticks: int = LandingMath.modified_ticks(GameState.ship.base_ascent_ticks,
+		[LandingMath.atmosphere_factor(atm)])
+	GameState.ship.current_order = {"type": "take_off", "ticks_total": maxi(1, ticks), "ticks_left": maxi(1, ticks)}
+	_set_state(FlightCore.State.ASCENDING)
+	_acknowledge("VOICE_SHIP_ASCENDING")
+	_notify_context()
+
+
+## Move to another surface site (timed planetary flight on the surface map).
+func _move(order: Dictionary) -> void:
+	if GameState.ship.location != Travel.Location.LANDED or _in_transition():
+		EventBus.order_rejected.emit("ORDER_REJECT_NOT_LANDED")
+		return
+	var body := _resolve_body(GameState.ship.location_body_id)
+	if body == null:
+		EventBus.order_rejected.emit("ORDER_REJECT_TARGET_UNKNOWN")
+		return
+	var dest_site := String(order.get("site_id", ""))
+	if dest_site == GameState.ship.surface_site_id:
+		EventBus.order_rejected.emit("ORDER_REJECT_ALREADY_HERE")
+		return
+	var ticks := SurfaceMath.surface_ticks(_surface_pos(body, GameState.ship.surface_site_id),
+		_surface_pos(body, dest_site), GameState.ship.surface_speed_su_per_tick)
+	GameState.ship.current_order = {
+		"type": "surface_move", "site_id": dest_site, "from_site_id": GameState.ship.surface_site_id,
+		"ticks_total": maxi(1, ticks), "ticks_left": maxi(1, ticks),
+	}
+	_set_state(FlightCore.State.SURFACE_MOVING)
+	_acknowledge("VOICE_SHIP_SURFACE_MOVING")
+	_notify_context()
+
+
+## Tick a timed surface transition (land/take-off/move) down; complete at zero.
+func _tick_transition(order: Dictionary) -> void:
+	var left := int(order.get("ticks_left", 0)) - 1
+	if left > 0:
+		order["ticks_left"] = left
+		return
+	match String(order.get("type", "")):
+		"land":
+			GameState.ship.location = Travel.Location.LANDED
+			GameState.ship.surface_site_id = String(order.get("site_id", ""))
+			GameState.ship.current_order = {}
+			_set_state(FlightCore.State.IDLE)
+			_acknowledge("VOICE_SHIP_LANDED")
+		"take_off":
+			var body := _resolve_body(GameState.ship.location_body_id)
+			GameState.ship.location = Travel.Location.HOLDING
+			GameState.ship.surface_site_id = ""
+			if body != null:
+				GameState.ship.position = body.position \
+					+ Vector2.from_angle(GameState.ship.orbit_angle) * Travel.holding_radius(body.radius)
+			GameState.ship.current_order = {}
+			_set_state(FlightCore.State.IDLE)
+			_acknowledge("VOICE_SHIP_AIRBORNE")
+		"surface_move":
+			GameState.ship.surface_site_id = String(order.get("site_id", ""))
+			GameState.ship.current_order = {}
+			_set_state(FlightCore.State.IDLE)
+			_acknowledge("VOICE_SHIP_ARRIVED_SITE")
+	_notify_context()
+
+
+## A timed surface transition is in progress (busy beat — no new orders).
+func _in_transition() -> bool:
+	var t := String(GameState.ship.current_order.get("type", ""))
+	return t == "land" or t == "take_off" or t == "surface_move"
+
+
+## Surface position (su) of a site id on a body ("" = Open Landing / wild touchdown).
+func _surface_pos(body: BodyData, site_id: String) -> Vector2:
+	if site_id == "":
+		return body.wild_touchdown
+	for loc: SurfaceLocationData in body.surface_locations:
+		if loc.id == site_id:
+			return loc.surface_position
+	return body.wild_touchdown
+
+
 # --- Execution (one step per SimClock tick) ---
 
 ## Smooth holding orbit, advanced per-frame (not on ticks) so it stays visible at
 ## the coarse tick rate; sim-speed scaled, so it freezes when paused.
 func _process(delta: float) -> void:
-	if GameState.ship.location != Travel.Location.HOLDING:
+	# Orbit only while genuinely holding — paused during a descent (still HOLDING).
+	if GameState.ship.location != Travel.Location.HOLDING or _in_transition():
 		return
 	var seconds := delta * SimClock.get_speed()
 	if seconds > 0.0:
@@ -244,11 +363,15 @@ func _process(delta: float) -> void:
 
 
 func _on_sim_tick(_tick: int) -> void:
+	var order: Dictionary = GameState.ship.current_order
+	# Surface transitions (land/take-off/move) are timed countdowns (ADR 0029/0030).
+	if _in_transition():
+		_tick_transition(order)
+		return
 	# Holding orbit is handled per-frame in _process, not on ticks.
 	if GameState.ship.location == Travel.Location.HOLDING:
 		return
 
-	var order: Dictionary = GameState.ship.current_order
 	if not _is_under_way():
 		return
 	# Multi-leg route (ADR 0027): fly through remaining waypoints first, no stop.
@@ -428,13 +551,22 @@ func _notify_context() -> void:
 ## Recompute motion from the loaded course (location is restored from the save;
 ## the transient ack beat is not persisted — resume directly in the transit phase).
 func _resync_after_load() -> void:
-	if not _is_under_way():
-		_set_state(FlightCore.State.IDLE)
-	else:
-		var order: Dictionary = GameState.ship.current_order
-		var origin: Vector2 = order.get("origin", GameState.ship.position)
-		_set_state(FlightCore.executing_state(origin, _destination(order), GameState.ship.position,
-			int(order.get("burn", FlightMath.Burn.STANDARD))))
+	# An in-progress surface transition resumes from its saved ticks_left (ADR 0029/0030).
+	match String(GameState.ship.current_order.get("type", "")):
+		"land":
+			_set_state(FlightCore.State.DESCENDING)
+		"take_off":
+			_set_state(FlightCore.State.ASCENDING)
+		"surface_move":
+			_set_state(FlightCore.State.SURFACE_MOVING)
+		_:
+			if not _is_under_way():
+				_set_state(FlightCore.State.IDLE)
+			else:
+				var order: Dictionary = GameState.ship.current_order
+				var origin: Vector2 = order.get("origin", GameState.ship.position)
+				_set_state(FlightCore.executing_state(origin, _destination(order),
+					GameState.ship.position, int(order.get("burn", FlightMath.Burn.STANDARD))))
 	_notify_context()
 
 

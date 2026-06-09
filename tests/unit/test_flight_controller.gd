@@ -271,6 +271,58 @@ func test_clear_course_drops_a_laid_in_course_when_idle() -> void:
 	assert_eq(GameState.ship.current_order, {}, "Clear Course removes the plotted course")
 
 
+func _hold_at(body_id: String) -> void:
+	var b := _find(body_id)
+	GameState.ship.location = Travel.Location.HOLDING
+	GameState.ship.location_body_id = body_id
+	GameState.ship.position = b.position + Vector2(Travel.holding_radius(b.radius), 0.0)
+
+
+func test_land_then_take_off() -> void:
+	_hold_at("verdant")  # Sol Verdant is landable (0.9 atm)
+	EventBus.order_issued.emit({"type": "land", "site_id": ""})
+	assert_eq(_fc.get_state(), FlightCore.State.DESCENDING, "descent begins")
+	for i in range(50):
+		if GameState.ship.location == Travel.Location.LANDED:
+			break
+		EventBus.sim_tick.emit(i + 1)
+	assert_eq(GameState.ship.location, Travel.Location.LANDED, "landed after the descent")
+	assert_eq(GameState.ship.surface_site_id, "", "Open Landing")
+
+	EventBus.order_issued.emit({"type": "take_off"})
+	assert_eq(_fc.get_state(), FlightCore.State.ASCENDING, "ascent begins")
+	for i in range(50):
+		if GameState.ship.location == Travel.Location.HOLDING:
+			break
+		EventBus.sim_tick.emit(i + 100)
+	assert_eq(GameState.ship.location, Travel.Location.HOLDING, "back in orbit after take-off")
+
+
+func test_land_rejected_on_a_non_landable_body() -> void:
+	_hold_at("anchorage")  # a station, not landable
+	watch_signals(EventBus)
+	EventBus.order_issued.emit({"type": "land", "site_id": ""})
+	assert_signal_emitted(EventBus, "order_rejected", "can't land on a non-landable body")
+	assert_ne(GameState.ship.location, Travel.Location.LANDED)
+
+
+func test_surface_move_changes_site() -> void:
+	_hold_at("verdant")
+	EventBus.order_issued.emit({"type": "land", "site_id": ""})  # Open Landing
+	for i in range(50):
+		if GameState.ship.location == Travel.Location.LANDED:
+			break
+		EventBus.sim_tick.emit(i + 1)
+	EventBus.order_issued.emit({"type": "move", "site_id": "verdant_outpost"})
+	assert_eq(_fc.get_state(), FlightCore.State.SURFACE_MOVING, "surface move begins")
+	for i in range(200):
+		if GameState.ship.surface_site_id == "verdant_outpost":
+			break
+		EventBus.sim_tick.emit(i + 200)
+	assert_eq(GameState.ship.surface_site_id, "verdant_outpost", "arrived at the site")
+	assert_eq(GameState.ship.location, Travel.Location.LANDED, "still landed after the move")
+
+
 func test_resync_after_load_resumes_transit() -> void:
 	var rubicon := _find("rubicon")
 	GameState.ship.position = rubicon.position * 0.5

@@ -89,3 +89,31 @@ func _merge(base: Dictionary, overrides: Dictionary) -> Dictionary:
 	var d := base.duplicate(true)
 	d.merge(overrides, true)
 	return d
+
+
+func test_land_needs_holding_at_a_landable_body() -> void:
+	assert_true(Travel.available(_ctx({"location": HOLD, "landable_here": true}))["land"],
+		"holding at a landable body -> can land")
+	assert_false(Travel.available(_ctx({"location": HOLD, "landable_here": false}))["land"],
+		"not landable -> cannot")
+	assert_false(Travel.available(_ctx({"location": DEEP, "landable_here": true}))["land"],
+		"must be holding first")
+	assert_false(Travel.available(_ctx({"location": HOLD, "landable_here": true, "in_transition": true}))["land"],
+		"mid-transition -> busy")
+
+
+func test_take_off_and_move_only_when_landed() -> void:
+	var landed := _ctx({"location": Travel.Location.LANDED})
+	assert_true(Travel.available(landed)["take_off"], "landed -> can take off")
+	assert_false(Travel.available(landed)["move"], "nowhere else to move")
+	assert_true(Travel.available(_merge(landed, {"has_other_site": true}))["move"],
+		"another site -> can move")
+	assert_false(Travel.available(_ctx({"location": HOLD}))["take_off"], "not landed -> no take off")
+	assert_false(Travel.available(_merge(landed, {"in_transition": true}))["take_off"],
+		"mid-transition -> busy")
+
+
+func test_space_orders_unavailable_while_landed() -> void:
+	var landed := _ctx({"location": Travel.Location.LANDED, "has_nav_selection": true, "has_course": true})
+	assert_false(Travel.available(landed)["lay_in"], "no space plotting while landed")
+	assert_false(Travel.available(landed)["engage"], "no engaging while landed")

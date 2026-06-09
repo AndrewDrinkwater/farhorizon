@@ -19,6 +19,9 @@ enum State {
 	CRUISING,
 	DECELERATING,
 	ARRIVING,
+	DESCENDING,     # landing transition (ADR 0029)
+	ASCENDING,      # take-off transition
+	SURFACE_MOVING, # planetary surface move (ADR 0030)
 }
 
 ## Fractions of the course spent in the ramp phases (presentation only in α0.1).
@@ -35,6 +38,9 @@ const _STATE_KEYS: Dictionary = {
 	State.CRUISING: "FLIGHT_STATE_CRUISING",
 	State.DECELERATING: "FLIGHT_STATE_DECELERATING",
 	State.ARRIVING: "FLIGHT_STATE_ARRIVING",
+	State.DESCENDING: "FLIGHT_STATE_DESCENDING",
+	State.ASCENDING: "FLIGHT_STATE_ASCENDING",
+	State.SURFACE_MOVING: "FLIGHT_STATE_SURFACE_MOVING",
 }
 
 

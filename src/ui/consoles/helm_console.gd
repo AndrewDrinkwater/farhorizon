@@ -19,6 +19,8 @@ var _sel_id: String = ""
 var _sel_point: Vector2 = Vector2.ZERO
 var _route_waypoints: Array[Vector2] = []  # intermediate route points (ADR 0027)
 var _plot_laid_in: bool = false  # has the current plot been laid in? (solid vs dashed, ADR 0028)
+var _land_site_id: String = ""       # site to land at ("" = Open Landing); set by the picker (ADR 0030)
+var _surface_target_id: String = ""  # selected surface destination for Move (ADR 0030)
 var _burn: int = FlightMath.Burn.STANDARD
 var _scale: int = OrreryParams.ScaleMode.LOG  # orrery schematic ↔ true scale (ADR 0021)
 var _ring_mode: int = TacticalView.RingMode.ISOCHRONE  # scope ETA ↔ distance rings
@@ -146,6 +148,13 @@ func _build_course_order() -> void:
 	row2.add_child(_make_action("scan", "HELM_SCAN", _scan))
 	row2.add_child(_make_action("focus", "HELM_FOCUS", _focus))
 	row2.add_child(_make_action("clear_course", "HELM_CLEAR_COURSE", _clear_route))
+
+	var row3 := HBoxContainer.new()
+	row3.add_theme_constant_override("separation", 4)
+	c.add_child(row3)
+	row3.add_child(_make_action("land", "HELM_LAND", _land))
+	row3.add_child(_make_action("take_off", "HELM_TAKE_OFF", _take_off))
+	row3.add_child(_make_action("move", "HELM_MOVE", _move))
 
 	_refresh_burn_buttons()
 
@@ -483,6 +492,18 @@ func _undock() -> void:
 	EventBus.order_issued.emit({"type": "undock"})
 
 
+func _land() -> void:
+	EventBus.order_issued.emit({"type": "land", "site_id": _land_site_id})
+
+
+func _take_off() -> void:
+	EventBus.order_issued.emit({"type": "take_off"})
+
+
+func _move() -> void:
+	EventBus.order_issued.emit({"type": "move", "site_id": _surface_target_id})
+
+
 # --- Refresh ---
 
 func _refresh_all() -> void:
@@ -554,7 +575,26 @@ func _context() -> Dictionary:
 			and ship.position.distance_to(contact.position) <= ship.sensor_range,
 		"nav_target_tier": GameState.contacts.tier_of(_sel_id) if is_contact else Sensors.Tier.UNDETECTED,
 		"route_nogo": _route_block_level() == Zones.Block.NOGO,
+		"landable_here": location_body != null and location_body.landable,
+		"in_transition": _in_transition(),
+		"has_other_site": ship.location == Travel.Location.LANDED and _has_other_surface_site(location_body),
 	}
+
+
+## A timed surface transition (land/take-off/move) is under way — Helm is busy.
+func _in_transition() -> bool:
+	var t := String(GameState.ship.current_order.get("type", ""))
+	return t == "land" or t == "take_off" or t == "surface_move"
+
+
+## Is there a surface site to Move to other than where we are? Open Landing ("")
+## is always an alternative when parked at a named site (ADR 0030).
+func _has_other_surface_site(body: BodyData) -> bool:
+	if body == null:
+		return false
+	if GameState.ship.surface_site_id != "":
+		return true
+	return not body.surface_locations.is_empty()
 
 
 func _refresh_preview() -> void:

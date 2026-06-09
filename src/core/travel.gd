@@ -10,8 +10,8 @@ extends RefCounted
 ## (FlightMath: Warp 1 = light crosses 1 AU in 8 ticks).
 const WU_PER_AU: float = 1000.0
 
-## Where the ship is when not under way.
-enum Location { DEEP_SPACE, HOLDING, DOCKED }
+## Where the ship is when not under way. LANDED is the surface context (ADR 0029).
+enum Location { DEEP_SPACE, HOLDING, DOCKED, LANDED }
 
 ## What a Nav Plot selection points at (ADR 0020). BODY/CONTACT carry an id;
 ## POINT is a free waypoint in empty space (no id); NONE = nothing selected.
@@ -30,6 +30,7 @@ const _LOCATION_KEYS: Dictionary = {
 	Location.DEEP_SPACE: "TRAVEL_DEEP_SPACE",
 	Location.HOLDING: "TRAVEL_HOLDING",
 	Location.DOCKED: "TRAVEL_DOCKED",
+	Location.LANDED: "TRAVEL_LANDED",
 }
 
 
@@ -51,7 +52,10 @@ static func location_key(location: int) -> String:
 ##   nav_target_in_range: bool   — that contact is within sensor range
 ##   nav_target_tier: int        — that contact's detection tier (Sensors.Tier)
 ##   route_nogo: bool            — a no-go zone crosses the composed route (ADR 0027)
-## Returns a bool per order id (lay_in/engage/belay/all_stop/dock/undock/scan).
+##   landable_here: bool         — the body we're HOLDING at is landable (ADR 0029)
+##   in_transition: bool         — a land/take-off/surface-move is under way (busy)
+##   has_other_site: bool        — LANDED with another surface site to Move to (ADR 0030)
+## Returns a bool per order id (lay_in/engage/belay/all_stop/dock/undock/scan/land/take_off/move).
 static func available(context: Dictionary) -> Dictionary:
 	var location: int = int(context.get("location", Location.DEEP_SPACE))
 	var in_transit: bool = bool(context.get("in_transit", false))
@@ -64,12 +68,20 @@ static func available(context: Dictionary) -> Dictionary:
 	var in_range: bool = bool(context.get("nav_target_in_range", false))
 	var tier: int = int(context.get("nav_target_tier", Sensors.Tier.UNDETECTED))
 	var route_nogo: bool = bool(context.get("route_nogo", false))  # a no-go on the route (ADR 0027)
+	var landable_here: bool = bool(context.get("landable_here", false))
+	var in_transition: bool = bool(context.get("in_transition", false))
+	var has_other_site: bool = bool(context.get("has_other_site", false))
+	var landed: bool = location == Location.LANDED
+	var busy: bool = in_transit or in_transition  # mid-transition: no new orders
 	return {
-		"lay_in": has_selection and not nav_here and not in_transit,
-		"engage": has_course and not in_transit and location != Location.DOCKED and not route_nogo,
+		"lay_in": has_selection and not nav_here and not busy and not landed,
+		"engage": has_course and location != Location.DOCKED and not landed and not route_nogo and not busy,
 		"belay": in_transit,
 		"all_stop": in_transit,
-		"dock": location == Location.HOLDING and can_dock_here and not in_transit,
+		"dock": location == Location.HOLDING and can_dock_here and not busy,
 		"undock": location == Location.DOCKED,
-		"scan": is_contact and in_range and tier == Sensors.Tier.BLIP and not in_transit,
+		"scan": is_contact and in_range and tier == Sensors.Tier.BLIP and not busy,
+		"land": location == Location.HOLDING and landable_here and not busy,
+		"take_off": landed and not in_transition,
+		"move": landed and has_other_site and not in_transition,
 	}
