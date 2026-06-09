@@ -20,6 +20,7 @@ func test_load_system_resets_ship_course_and_contacts() -> void:
 	GameState.ship.location = Travel.Location.HOLDING
 	GameState.ship.location_body_id = "verdant"
 	GameState.contacts.set_tier("kepri_derelict", Sensors.Tier.IDENTIFIED)
+	GameState.zones.mark_fired("some_trigger")
 
 	var sol := TypeRegistry.get_system("sol")
 	GameState.load_system(sol)
@@ -31,6 +32,7 @@ func test_load_system_resets_ship_course_and_contacts() -> void:
 	assert_eq(GameState.ship.location_body_id, "", "not holding/docked anywhere")
 	assert_eq(GameState.contacts.tier_of("kepri_derelict"), Sensors.Tier.UNDETECTED,
 		"transient discovery reset for the new system")
+	assert_false(GameState.zones.has_fired("some_trigger"), "zone triggers re-arm in the new system")
 
 
 func test_load_system_null_is_a_noop() -> void:

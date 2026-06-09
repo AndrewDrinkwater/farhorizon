@@ -46,6 +46,14 @@ func test_contacts_state_round_trip() -> void:
 	assert_eq(back.tier_of("unknown"), Sensors.Tier.UNDETECTED, "absent = undetected")
 
 
+func test_zones_state_round_trip() -> void:
+	var z := ZonesState.new()
+	z.mark_fired("drift_signal")
+	var back := ZonesState.from_dict(z.to_dict())
+	assert_true(back.has_fired("drift_signal"), "fired one-shot trigger remembered")
+	assert_false(back.has_fired("calder_corona"), "absent = not fired")
+
+
 func test_forgiving_from_dict_uses_defaults() -> void:
 	# Empty / partial dicts must not crash and must fall back to defaults.
 	var clock := ClockState.from_dict({})

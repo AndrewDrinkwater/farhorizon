@@ -24,6 +24,7 @@ func _ready() -> void:
 	_bootstrap_system()
 	add_child(FlightController.new())   # flight, via EventBus
 	add_child(SensorController.new())   # sensor detection, via EventBus
+	add_child(ZoneController.new())     # zone membership + triggers (ADR 0026)
 	add_child(SystemLoader.new())       # runtime system switching (ADR 0024)
 	add_child(SaveController.new())     # F5 save / F9 load
 	_build_ui()

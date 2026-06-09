@@ -11,6 +11,7 @@ var clock: ClockState = ClockState.new()
 var ship: ShipState = ShipState.new()
 var system: SystemState = SystemState.new()
 var contacts: ContactsState = ContactsState.new()  # transient detection state (ADR 0017)
+var zones: ZonesState = ZonesState.new()  # fired one-shot zone triggers (ADR 0026)
 
 
 ## Reset the tree to a fresh run (used by "new game" and as the load baseline).
@@ -19,6 +20,7 @@ func new_game() -> void:
 	ship = ShipState.new()
 	system = SystemState.new()
 	contacts = ContactsState.new()
+	zones = ZonesState.new()
 
 
 ## Switch to a loaded star system (ADR 0024): store the new id, reset the ship to
@@ -36,6 +38,7 @@ func load_system(system_data: SystemData) -> void:
 	ship.location = Travel.Location.DEEP_SPACE
 	ship.location_body_id = ""
 	contacts = ContactsState.new()  # nothing discovered in the new system yet
+	zones = ZonesState.new()        # triggers re-arm in the new system
 
 
 ## Serialize the whole tree to a plain Dictionary (SaveManager wraps it with the
@@ -46,6 +49,7 @@ func to_dict() -> Dictionary:
 		"ship": ship.to_dict(),
 		"system": system.to_dict(),
 		"contacts": contacts.to_dict(),
+		"zones": zones.to_dict(),
 	}
 
 
@@ -56,3 +60,4 @@ func from_dict(data: Dictionary) -> void:
 	ship = ShipState.from_dict(data.get("ship", {}))
 	system = SystemState.from_dict(data.get("system", {}))
 	contacts = ContactsState.from_dict(data.get("contacts", {}))
+	zones = ZonesState.from_dict(data.get("zones", {}))

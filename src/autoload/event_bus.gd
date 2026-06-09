@@ -43,6 +43,12 @@ signal contact_detected(contact_id: String)
 signal contact_lost(contact_id: String)
 signal contact_promoted(contact_id: String, tier: int)
 
+# --- Zones (ADR 0026) — ship entered/left an authored region; a region's
+# on-enter trigger fired (for the future event system to consume). ---
+signal zone_entered(zone_id: String)
+signal zone_exited(zone_id: String)
+signal zone_trigger_fired(zone_id: String, event_id: String)
+
 # --- Fuel ---
 signal fuel_changed(pool: int, value: float)
 
