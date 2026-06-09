@@ -44,6 +44,7 @@ var _selected_id: String = ""
 var _selected_point: Vector2 = Vector2.ZERO
 var _has_point_sel: bool = false  # a free-space waypoint is selected (ADR 0020)
 var _preview_route: PackedVector2Array = PackedVector2Array()  # compose-time route (ADR 0027)
+var _route_laid_in: bool = false  # is the plotted route committed? (solid vs dashed, ADR 0028)
 var _drag_wp: int = -1  # waypoint being dragged (ADR 0028), -1 = none
 var _drag_wps: PackedVector2Array = PackedVector2Array()  # working waypoint list during a drag
 var _burn: int = FlightMath.Burn.STANDARD  # mirrors the Helm burn selector (ADR 0019)
@@ -69,8 +70,9 @@ func build(system: SystemData) -> void:
 	_init_system(system)
 
 
-func _on_route_changed(route: PackedVector2Array) -> void:
+func _on_route_changed(route: PackedVector2Array, laid_in: bool) -> void:
 	_preview_route = route
+	_route_laid_in = laid_in
 
 
 func _on_system_changed(system_id: String) -> void:
@@ -366,9 +368,8 @@ func _draw_plotted_course() -> void:
 		return
 	# Plotted (not yet laid in) draws dashed; laid in draws solid — clearly distinct
 	# (ADR 0028). Obstruction red/amber still applies to either.
-	var laid_in := _has_laid_in_course()
 	var color := _route_color(_preview_route, Palette.ACCENT)
-	_draw_route_legs(_preview_route, color, not laid_in)
+	_draw_route_legs(_preview_route, color, not _route_laid_in)
 	for i in range(_preview_route.size() - 1):
 		_draw_course_time(_preview_route[i], _preview_route[i + 1])
 	for i in range(1, _preview_route.size() - 1):
@@ -440,10 +441,6 @@ func _draw_dashed(points: PackedVector2Array, color: Color) -> void:
 			if pen >= (DASH_PX if on else DASH_GAP_PX) - 0.001:
 				pen = 0.0
 				on = not on
-
-
-func _has_laid_in_course() -> bool:
-	return String(GameState.ship.current_order.get("type", "")) == "course"
 
 
 ## True while the captain is composing or flying a course (a target/point selected,

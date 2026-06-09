@@ -32,7 +32,7 @@ const ISOCHRONE_RING_COLOR := Color(Palette.STATUS_NOMINAL, 0.30)
 const ISOCHRONE_TICKS: Array[int] = [10, 20, 30, 60, 120]
 
 ## Range-ring radii in AU for the flat-distance mode (ADR 0021 toggle reuse).
-const DISTANCE_RING_AU: Array[float] = [1.0, 2.0, 3.0, 5.0, 10.0, 20.0]
+const DISTANCE_RING_AU: Array[float] = [1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 20.0]
 
 ## What the concentric rings mean: ETA (isochrones, burn-aware) or flat distance.
 enum RingMode { ISOCHRONE, DISTANCE }
@@ -42,6 +42,7 @@ var _selected_id: String = ""
 var _selected_point: Vector2 = Vector2.ZERO
 var _has_point_sel: bool = false  # a free-space waypoint is selected (ADR 0020)
 var _preview_route: PackedVector2Array = PackedVector2Array()  # compose-time route (ADR 0027)
+var _route_laid_in: bool = false  # is the plotted route committed? (solid vs dashed, ADR 0028)
 var _drag_wp: int = -1  # waypoint being dragged (ADR 0028), -1 = none
 var _drag_wps: PackedVector2Array = PackedVector2Array()
 var _center: Vector2
@@ -58,7 +59,7 @@ func build(system: SystemData) -> void:
 	EventBus.nav_point_selected.connect(_on_point_selected)
 	EventBus.nav_burn_changed.connect(func(burn: int) -> void: _burn = burn)
 	EventBus.system_changed.connect(_on_system_changed)
-	EventBus.nav_route_changed.connect(func(route: PackedVector2Array) -> void: _preview_route = route)
+	EventBus.nav_route_changed.connect(_on_route_changed)
 	EventBus.nav_ring_mode_changed.connect(func(mode: int) -> void: _ring_mode = mode)
 	_init_system(system)
 
@@ -73,6 +74,11 @@ func _init_system(system: SystemData) -> void:
 	_selected_id = ""
 	_has_point_sel = false
 	queue_redraw()
+
+
+func _on_route_changed(route: PackedVector2Array, laid_in: bool) -> void:
+	_preview_route = route
+	_route_laid_in = laid_in
 
 
 func _on_target_selected(id: String) -> void:
@@ -267,7 +273,7 @@ func _draw_course() -> void:
 ## dashed until laid in, solid once committed; handles drawn fatter to grab.
 func _draw_plotted_course() -> void:
 	if _preview_route.size() >= 2:
-		_draw_route(_preview_route, WAYPOINT_HANDLE_PX, not _has_laid_in_course())
+		_draw_route(_preview_route, WAYPOINT_HANDLE_PX, not _route_laid_in)
 
 
 ## Draw a true-scale route (straight legs) coloured by its worst obstruction;
@@ -309,10 +315,6 @@ func _draw_dashed(points: PackedVector2Array, color: Color) -> void:
 			if pen >= (DASH_PX if on else DASH_GAP_PX) - 0.001:
 				pen = 0.0
 				on = not on
-
-
-func _has_laid_in_course() -> bool:
-	return String(GameState.ship.current_order.get("type", "")) == "course"
 
 
 func _route_color(route: PackedVector2Array, clear_color: Color) -> Color:

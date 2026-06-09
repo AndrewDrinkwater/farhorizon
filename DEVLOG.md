@@ -4,6 +4,21 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-09 — Fix: laid-in solid-line bug; +4 AU range ring
+
+- **Bug:** after engage → select new target → belay, the new (uncommitted) plot
+  drew solid. The views inferred "laid in" from `current_order` existing, but a
+  belayed course leaves the *old* course in `current_order` while the plot shows
+  the *new* target. Now the Helm owns the truth (`_plot_laid_in`, set on Lay In,
+  cleared on any re-plot/edit) and broadcasts it on `nav_route_changed(route,
+  laid_in)`; the views style solid/dashed from that flag, not from `current_order`.
+  Replaced the `_invalidate_laid_in`-drops-current_order hack.
+- **Feature:** added a 4 AU range ring to the tactical distance-ring view.
+
+172 GUT tests green; boots clean.
+
+---
+
 ## 2026-06-09 — Build: course RM-over-route, plotted/laid-in colour, context toggle
 
 Three nav refinements from in-engine feedback. **170 GUT tests green; boots clean.**

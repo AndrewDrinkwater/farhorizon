@@ -91,12 +91,20 @@ func test_mode_toggle_drives_rings_in_tactical_view() -> void:
 	assert_signal_not_emitted(EventBus, "nav_scale_changed", "and not the orrery scale")
 
 
-func test_changing_the_plot_uncommits_a_laid_in_course() -> void:
-	GameState.ship.current_order = {"type": "course", "engaged": false}  # a laid-in course
-	watch_signals(EventBus)
+func test_lay_in_commits_and_editing_uncommits_the_plot() -> void:
+	EventBus.nav_target_selected.emit("verdant")
+	assert_false(_helm._plot_laid_in, "a fresh plot is not committed")
+	_helm._lay_in_course()
+	assert_true(_helm._plot_laid_in, "Lay In commits it (draws solid)")
 	EventBus.nav_target_selected.emit("rubicon")  # re-plot to a new target
-	var order: Dictionary = get_signal_parameters(EventBus, "order_issued", 0)[0]
-	assert_eq(order.get("type"), "clear_course", "editing the plot drops the stale laid-in course")
+	assert_false(_helm._plot_laid_in, "re-plotting un-commits it (back to dashed)")
+
+
+func test_route_changed_carries_the_laid_in_flag() -> void:
+	watch_signals(EventBus)
+	EventBus.nav_target_selected.emit("verdant")
+	var params: Array = get_signal_parameters(EventBus, "nav_route_changed", 0)
+	assert_false(params[1], "a fresh plot broadcasts laid_in = false")
 
 
 func test_arrival_clears_the_plot() -> void:
