@@ -21,7 +21,7 @@ a mission clock. Being rebuilt deliberately from scratch; α0.1 = "The Ship Flie
   (ADR 0026/0027; **built**).
 - `docs/landing.md` — land/take-off, atmosphere (Earth atm), surface locations +
   planetary navigation: data shapes, `LandingMath`/`SurfaceMath` contracts,
-  example content (ADR 0029/0030; designed, not built).
+  example content (ADR 0029/0030; **built**).
 - `docs/adr/0001..0030` — one decision per file. **If you change a decision,
   add/supersede an ADR.**
 - `DEVLOG.md` — append a short entry per work session (newest on top).
@@ -141,10 +141,17 @@ localization/  strings.csv
   **grabs the course line to insert/drag waypoints** around obstacles
   (`nav_waypoints_set`); **Clear Course** (`clear_course` order) wipes the plot.
   **166 tests green; boots clean.**
-- **Next:** in-engine feel pass vs Calder (orrery density, moon insets, isochrones,
-  sensor sweep, zone outlines/labels, route legibility) + the standing α0.3 tuning;
-  then scope the next slice (station-
-  keeping hold, survey rung, or a second console) — write the spec before building.
+- **Landing + surface navigation — built** (ADR 0029/0030). `BodyData` landable /
+  `atmosphere_atm` / surface sites (`SurfaceLocationData`); `Travel.Location.LANDED`
+  with HOLDING→Land→LANDED→Take Off→HOLDING and surface Move, all timed clock
+  transitions; pure `LandingMath` (atmosphere class/factor, modifiable-stat chain)
+  + `SurfaceMath`; a `SurfaceView` the shell swaps to while landed, a Helm site
+  picker (Open Landing + sites) + surface Target Info. Landable bodies authored
+  into Calder + Sol. Saved/resumed. **193 tests green; boots clean.**
+- **Next:** in-engine feel pass (orrery density; zone legibility; **atmosphere
+  curve / base land ticks / surface speed / su map scale**) + the standing α0.3
+  tuning; then scope the next slice (survey rung, bases/POIs behaviour, or a second
+  console) — write the spec before building.
 
 ## Workflow expectations
 - Keep `DEVLOG.md` updated; add an ADR for any architectural fork.

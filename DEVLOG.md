@@ -4,6 +4,36 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-09 — Build: landing + surface navigation (ADR 0029/0030)
+
+Built the landing slice in order, tests green at each step. **193 GUT tests green;
+boots clean.**
+
+1. **Data + content:** `BodyData.landable/atmosphere_atm/wild_touchdown/
+   surface_locations`; new `SurfaceLocationData` (WILD/SITE/BASE/POI, su coords);
+   `ShipState` surface_site_id + surface_speed + base descent/ascent ticks (saved).
+   Authored Calder Halcyon/Ember/Toll + Bastion (no surface) and Sol Verdant
+   landable, with sites + LOC_* strings.
+2. **Core:** `LandingMath` (atmosphere_class, atmosphere_factor, modified_ticks —
+   the modifiable-stat chain descent/ascent share) + `SurfaceMath.surface_ticks`.
+   GUT-tested.
+3. **Pipeline:** `Travel.Location.LANDED` + `Travel.available` land/take-off/move
+   (space orders gated off while landed/busy); `FlightCore` DESCENDING/ASCENDING/
+   SURFACE_MOVING; FlightController land/take-off/move as timed clock countdowns
+   (descent = base × atmosphere factor; move = surface_ticks); orbit paused
+   mid-descent; resync resumes a phase. Helm Land/Take Off/Move orders + flags.
+4. **UI:** `SurfaceView` (true-scale surface map, ship pos interpolated mid-move,
+   click a site to pick); the shell swaps orrery/scope ↔ surface on land/take-off
+   (T ignored while landed); a Helm site picker (Open Landing + sites) feeding
+   Land/Move via `surface_site_selected`; surface Target Info (site, atmosphere
+   class, move ETA in su); Flight Status shows LANDED + phases.
+5. **Persistence:** LANDED + surface_site_id + in-progress transition round-trip;
+   resync resumes the phase; views re-init on load. Tested.
+6. **Feel pass:** atmosphere curve / base land ticks / surface speed / su map scale
+   are by F5. ADRs 0029 + 0030 confirmed.
+
+---
+
 ## 2026-06-09 — Design: landing + surface navigation (ADR 0029/0030)
 
 Design session (no code). The ship can now land, take off, and move between
