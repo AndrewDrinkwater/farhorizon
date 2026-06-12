@@ -37,6 +37,11 @@ const DISTANCE_RING_AU: Array[float] = [1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 20.0]
 ## What the concentric rings mean: ETA (isochrones, burn-aware) or flat distance.
 enum RingMode { ISOCHRONE, DISTANCE }
 
+## The scope is short-range sensors by default; scroll out once for a long-range
+## sweep capped at this radius (ADR 0017). Contacts still only resolve within actual
+## sensor range — long range just widens the chart.
+const LONG_RANGE_AU: float = 15.0
+
 var _system: SystemData
 var _selected_id: String = ""
 var _selected_point: Vector2 = Vector2.ZERO
@@ -46,6 +51,8 @@ var _route_laid_in: bool = false  # is the plotted route committed? (solid vs da
 var _drag_wp: int = -1  # waypoint being dragged (ADR 0028), -1 = none
 var _drag_wps: PackedVector2Array = PackedVector2Array()
 var _center: Vector2
+var _view_rect: Rect2 = Rect2()  # plot region between the drawers (ADR 0035); empty = full viewport
+var _long_range: bool = false  # scrolled out to the long-range sweep (15 AU)
 var _px_per_wu: float = 0.1
 var _burn: int = FlightMath.Burn.STANDARD  # mirrors the Helm burn selector (ADR 0019)
 var _ring_mode: int = RingMode.ISOCHRONE   # ETA rings ↔ distance rings (Helm toggle)
@@ -98,6 +105,7 @@ func _init_system(system: SystemData) -> void:
 	_system = system
 	_selected_id = ""
 	_has_point_sel = false
+	_long_range = false  # back to short-range sensors on a new system
 	_ship_curr = GameState.ship.position
 	_ship_prev = _ship_curr
 	_tick_accum = 0.0
@@ -128,16 +136,64 @@ func _process(delta: float) -> void:
 
 # --- Projection (true scale, ship-centred) ---
 
+## Bound the scope to a screen region (the area between the drawers, ADR 0035);
+## empty/zero rect falls back to the viewport.
+func set_view_rect(rect: Rect2) -> void:
+	_view_rect = rect
+	_recompute()
+	queue_redraw()
+
+
+func _region() -> Rect2:
+	if _view_rect.size.x > 0.0 and _view_rect.size.y > 0.0:
+		return _view_rect
+	return Rect2(Vector2.ZERO, get_viewport_rect().size)
+
+
 func _recompute() -> void:
-	var vp := get_viewport_rect().size
-	_center = vp * 0.5
-	var range_wu: float = maxf(1.0, GameState.ship.sensor_range * SCOPE_MARGIN)
+	var region := _region()
+	var vp := region.size
+	_center = region.position + vp * 0.5
+	# Short range fills the scope with the sensor circle; long range fits the 15-AU sweep.
+	var range_wu: float = LONG_RANGE_AU * Travel.WU_PER_AU if _long_range \
+		else maxf(1.0, GameState.ship.sensor_range * SCOPE_MARGIN)
 	_px_per_wu = (minf(vp.x, vp.y) * SCOPE_FILL) / range_wu
 	_max_ring_px = minf(vp.x, vp.y) * 0.5 - 12.0  # keep a ring + its label on-screen
 
 
+## Scroll out (once) to long-range sensors / back in to short range (ADR 0017).
+func _set_long_range(long: bool) -> void:
+	if long == _long_range:
+		return
+	_long_range = long
+	_recompute()
+	queue_redraw()
+
+
 func _to_screen(real_pos: Vector2) -> Vector2:
 	return _center + (real_pos - _interp_ship()) * _px_per_wu
+
+
+## The 15-AU long-range boundary ring (ADR 0017) — a distinct dashed-feel accent ring
+## with an "15 AU" tag at the top, so the sweep limit reads on the scope.
+func _draw_range_limit() -> void:
+	var r := LONG_RANGE_AU * Travel.WU_PER_AU * _px_per_wu
+	draw_arc(_center, r, 0.0, TAU, 128, Color(Palette.ACCENT, 0.5), 1.5, true)
+	var text := tr("SCOPE_RANGE_LIMIT").format({"au": "%.0f" % LONG_RANGE_AU})
+	var sz := _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_SIZE)
+	draw_string(_font, _center + Vector2(-sz.x * 0.5, -r - 6.0), text,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_SIZE, Color(Palette.ACCENT, 0.8))
+
+
+## A small range readout in the scope's top-right — which sensor range is active and
+## how to change it (scroll). Clear of the scale toggle (top-left) and toast (centre).
+func _draw_range_label() -> void:
+	var region := _region()
+	var text := tr("SCOPE_RANGE_LONG").format({"au": "%.0f" % LONG_RANGE_AU}) if _long_range \
+		else tr("SCOPE_RANGE_SHORT")
+	var size := _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_SIZE)
+	var pos := Vector2(region.end.x - size.x - 16.0, region.position.y + 24.0)
+	draw_string(_font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_SIZE, Palette.STATUS_INFO)
 
 
 # --- Draw ---
@@ -150,6 +206,9 @@ func _draw() -> void:
 	var radius := GameState.ship.sensor_range * _px_per_wu
 	draw_arc(_center, radius, 0.0, TAU, 96, RING_COLOR, 1.5, true)
 	draw_arc(_center, radius * 0.5, 0.0, TAU, 80, Color(RING_COLOR, 0.18), 1.0, true)
+	if _long_range:
+		_draw_range_limit()  # the 15-AU long-range boundary ring
+	_draw_range_label()
 
 	_draw_zones()  # beneath bodies/contacts (ADR 0026); true shapes at this scale
 	if _ring_mode == RingMode.DISTANCE:
@@ -428,16 +487,24 @@ func _find(id: String) -> BodyData:
 func _unhandled_input(event: InputEvent) -> void:
 	if not is_visible_in_tree() or _system == null:
 		return
+	if event is InputEventMouseButton and event.pressed \
+			and event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+		_set_long_range(true)   # scroll out → long-range sweep (15 AU)
+		return
+	if event is InputEventMouseButton and event.pressed \
+			and event.button_index == MOUSE_BUTTON_WHEEL_UP:
+		_set_long_range(false)  # scroll in → short-range sensors
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
-			_on_left_press(get_viewport().get_mouse_position())
+			_on_left_press(get_local_mouse_position())
 		else:
 			_drag_wp = -1  # release ends any waypoint drag
 	elif event is InputEventMouseMotion and _drag_wp >= 0:
 		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 			_drag_wp = -1  # release happened off the map — end the drag
 			return
-		_drag_wps[_drag_wp] = _screen_to_real(get_viewport().get_mouse_position())
+		_drag_wps[_drag_wp] = _screen_to_real(get_local_mouse_position())
 		EventBus.nav_waypoints_set.emit(_drag_wps)
 		queue_redraw()
 

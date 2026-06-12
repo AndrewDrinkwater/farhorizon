@@ -16,7 +16,8 @@ const SELECT_GAP_PX := 7.0
 const LABEL_SIZE := 13
 const PICK_PX := 22.0
 const ZOOM_MIN := 0.4
-const ZOOM_MAX := 12.0
+const ZOOM_MAX := 40.0  # true scale needs deep zoom to read the inner system
+const LINEAR_DEFAULT_ZOOM := 4.0  # true scale starts magnified, not whole-system tiny
 const ZOOM_STEP := 1.15   # per wheel notch
 const COURSE_FLATNESS_PX := 1.0  # max chord deviation before a course segment subdivides
 const COURSE_MAX_DEPTH := 9      # subdivision cap (≤512 segments) — terminates the recursion
@@ -51,6 +52,7 @@ var _burn: int = FlightMath.Burn.STANDARD  # mirrors the Helm burn selector (ADR
 var _scale_mode: int = OrreryParams.ScaleMode.LOG  # schematic ↔ true scale (ADR 0021)
 var _zoom: float = 1.0          # wheel zoom about the cursor (ADR 0023)
 var _pan: Vector2 = Vector2.ZERO  # drag pan
+var _locked: bool = false       # locked on the ship (centre + max zoom + follow, ADR 0035)
 var _panning: bool = false
 var _pan_last: Vector2 = Vector2.ZERO
 # Render interpolation of the per-tick transit position (ADR 0004): draw the ship
@@ -59,6 +61,8 @@ var _ship_prev: Vector2 = Vector2.ZERO
 var _ship_curr: Vector2 = Vector2.ZERO
 var _tick_accum: float = 0.0  # speed-scaled seconds since the last tick
 var _font: Font
+var _view_rect: Rect2 = Rect2()  # plot region between the drawers (ADR 0035); empty = full viewport
+var _proj: Dictionary = {}  # body id -> screen pos this frame (moons via project_child)
 
 
 func build(system: SystemData) -> void:
@@ -116,6 +120,7 @@ func _init_system(system: SystemData) -> void:
 	_has_point_sel = false
 	_zoom = 1.0
 	_pan = Vector2.ZERO
+	_locked = false
 	_ship_curr = GameState.ship.position
 	_ship_prev = _ship_curr
 	_tick_accum = 0.0
@@ -132,18 +137,58 @@ func _init_system(system: SystemData) -> void:
 	queue_redraw()
 
 
+## Bound the plot to a screen region (the area between the drawers, ADR 0035) so it
+## reads as a contained central display; empty/zero rect falls back to the viewport.
+func set_view_rect(rect: Rect2) -> void:
+	_view_rect = rect
+	_rebuild_params()
+	queue_redraw()
+
+
+func _region() -> Rect2:
+	if _view_rect.size.x > 0.0 and _view_rect.size.y > 0.0:
+		return _view_rect
+	return Rect2(Vector2.ZERO, get_viewport_rect().size)
+
+
 func _rebuild_params() -> void:
-	var vp := get_viewport_rect().size
+	var region := _region()
 	_params = OrreryParams.new()
 	_params.mode = _scale_mode
-	_params.center = vp * 0.5
+	_params.center = region.position + region.size * 0.5
 	_params.ring_inner = 64.0
-	_params.ring_outer = minf(vp.x, vp.y) * 0.42
+	_params.ring_outer = minf(region.size.x, region.size.y) * 0.42
 
 
 func _process(delta: float) -> void:
 	_tick_accum += delta * SimClock.get_speed()  # sub-tick progress for interpolation
+	if _locked:
+		_update_lock_pan()  # follow the ship while locked on (ADR 0035)
 	queue_redraw()  # ship moves; contacts wink; cheap (one instrument)
+
+
+# --- Map view controls (ADR 0035): lock-on-ship and fit-the-system ---
+
+## Centre on the ship at maximum zoom and follow it as it moves.
+func lock_on_ship() -> void:
+	_locked = true
+	_zoom = ZOOM_MAX
+	_update_lock_pan()
+	queue_redraw()
+
+
+## Centre on the star and zoom out so the whole system fits (the default framing).
+func fit_system() -> void:
+	_locked = false
+	_zoom = 1.0
+	_pan = Vector2.ZERO
+	queue_redraw()
+
+
+## Pan so the (interpolated) ship sits at the chart centre, at the current zoom.
+func _update_lock_pan() -> void:
+	var p_ship := OrreryProjection.project(_interp_ship() - _star_pos, _params)
+	_pan = -(p_ship - _params.center) * _zoom
 
 
 func _on_target_selected(target_id: String) -> void:
@@ -163,8 +208,10 @@ func _on_burn_changed(burn: int) -> void:
 
 func _on_scale_changed(mode: int) -> void:
 	_scale_mode = mode
-	_zoom = 1.0  # reframe cleanly for the new mode (ADR 0023)
+	# True scale starts magnified so the inner system is legible; schematic fits whole.
+	_zoom = LINEAR_DEFAULT_ZOOM if mode == OrreryParams.ScaleMode.LINEAR else 1.0
 	_pan = Vector2.ZERO
+	_locked = false
 	_rebuild_params()  # remap radii (log ↔ linear); _process redraws
 
 
@@ -224,6 +271,7 @@ func _draw() -> void:
 	if _system == null:
 		return
 	var proj := _project_bodies()
+	_proj = proj  # cache for the course endpoint (a moon's marker ≠ its raw projection)
 	_draw_zones()  # beneath bodies/contacts (ADR 0026); warped through the projection
 	_draw_rings(proj)
 	if _under_way():
@@ -380,14 +428,15 @@ func _draw_course() -> void:
 	# sharpest near the star — and uniform sampling would kink it).
 	var route := _course_route(order)
 	var color := _route_color(route, Palette.ACCENT)  # engaged → solid
-	_draw_route_legs(route, color, false)
+	var dest := _dest_screen(route[route.size() - 1])
+	_draw_route_legs(route, color, false, dest)
 	for i in range(route.size() - 1):
 		_draw_course_time(route[i], route[i + 1])  # time pips per leg
 	for i in range(1, route.size() - 1):
 		draw_circle(_project_course_point(route[i]), 3.0, color)  # waypoint dots
 	var target: BodyData = _by_id.get(String(order.get("target_id", "")), null)
 	var ring: float = (_marker_px(target.kind) + 5.0) if target != null else 8.0
-	draw_arc(_project_course_point(route[route.size() - 1]), ring, 0.0, TAU, 24, color, 1.0, true)
+	draw_arc(dest, ring, 0.0, TAU, 24, color, 1.0, true)
 
 
 ## The editable plotted course (compose route), coloured by obstruction (ADR 0028):
@@ -399,12 +448,13 @@ func _draw_plotted_course() -> void:
 	# Plotted (not yet laid in) draws dashed; laid in draws solid — clearly distinct
 	# (ADR 0028). Obstruction red/amber still applies to either.
 	var color := _route_color(_preview_route, Palette.ACCENT)
-	_draw_route_legs(_preview_route, color, not _route_laid_in)
+	var dest := _dest_screen(_preview_route[_preview_route.size() - 1])
+	_draw_route_legs(_preview_route, color, not _route_laid_in, dest)
 	for i in range(_preview_route.size() - 1):
 		_draw_course_time(_preview_route[i], _preview_route[i + 1])
 	for i in range(1, _preview_route.size() - 1):
 		draw_circle(_project_course_point(_preview_route[i]), WAYPOINT_HANDLE_PX, color)
-	draw_arc(_project_course_point(_preview_route[_preview_route.size() - 1]), 8.0, 0.0, TAU, 24, color, 1.0, true)
+	draw_arc(dest, 8.0, 0.0, TAU, 24, color, 1.0, true)
 
 
 ## Course colour from the worst obstruction along the route (ADR 0028): red for a
@@ -437,15 +487,28 @@ func _course_route(order: Dictionary) -> PackedVector2Array:
 
 
 ## Draw each route leg as the projected, adaptively-flattened curve — solid for a
-## committed (laid-in/engaged) course, dashed for a plotted one (ADR 0028).
-func _draw_route_legs(route: PackedVector2Array, color: Color, dashed: bool) -> void:
+## committed (laid-in/engaged) course, dashed for a plotted one (ADR 0028). The final
+## leg snaps to the destination's MARKER (a moon's cluster ≠ its raw projection in
+## Schematic mode) so the course meets the dot you're aiming at (ADR 0021/0022).
+func _draw_route_legs(route: PackedVector2Array, color: Color, dashed: bool, dest: Vector2) -> void:
 	for i in range(route.size() - 1):
 		var pts := PackedVector2Array([_project_course_point(route[i])])
 		_subdivide_course(route[i], route[i + 1], 0.0, 1.0, 0, pts)
+		if i == route.size() - 2:
+			pts[pts.size() - 1] = dest  # last leg ends on the destination marker
 		if dashed:
 			_draw_dashed(pts, color)
 		else:
 			draw_polyline(pts, color, 1.5, true)
+
+
+## The screen point of a route's destination: a selected/target body's MARKER (so a
+## moon's cluster position is used, not its raw projection), else the plain projection.
+func _dest_screen(route_last_world: Vector2) -> Vector2:
+	var id := String(GameState.ship.current_order.get("target_id", "")) if _under_way() else _selected_id
+	if id != "" and _proj.has(id):
+		return _proj[id]
+	return _project_course_point(route_last_world)
 
 
 ## Dash a polyline (continuous across its segments) — the "plotted, not committed"
@@ -590,23 +653,25 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseButton:
 		if event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			_zoom_at(get_viewport().get_mouse_position(), ZOOM_STEP)
+			_zoom_at(get_local_mouse_position(), ZOOM_STEP)
 			return
 		if event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			_zoom_at(get_viewport().get_mouse_position(), 1.0 / ZOOM_STEP)
+			_zoom_at(get_local_mouse_position(), 1.0 / ZOOM_STEP)
 			return
 		# Right- or middle-drag pans (left stays selection/waypoint/focus) — ADR 0023.
 		if event.button_index == MOUSE_BUTTON_RIGHT or event.button_index == MOUSE_BUTTON_MIDDLE:
 			_panning = event.pressed
-			_pan_last = get_viewport().get_mouse_position()
+			_pan_last = get_local_mouse_position()
+			if event.pressed:
+				_locked = false  # manual pan breaks lock-on (ADR 0035)
 			return
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
-				_on_left_press(get_viewport().get_mouse_position())
+				_on_left_press(get_local_mouse_position())
 			else:
 				_drag_wp = -1  # release ends any waypoint drag
 	elif event is InputEventMouseMotion:
-		var mouse := get_viewport().get_mouse_position()
+		var mouse := get_local_mouse_position()
 		if _drag_wp >= 0:
 			if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 				_drag_wp = -1  # release happened off the map — end the drag
@@ -687,6 +752,7 @@ func _course_leg_at(mouse: Vector2) -> int:
 
 ## Zoom by `factor` about the cursor, keeping the chart point under it fixed (ADR 0023).
 func _zoom_at(cursor: Vector2, factor: float) -> void:
+	_locked = false  # manual zoom breaks lock-on (ADR 0035)
 	var old_zoom := _zoom
 	_zoom = clampf(_zoom * factor, ZOOM_MIN, ZOOM_MAX)
 	if is_equal_approx(_zoom, old_zoom):

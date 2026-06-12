@@ -11,8 +11,12 @@ extends RefCounted
 ## (CONVENTIONS.md), expected to change at the step-9 feel pass and likely to
 ## move onto per-hull authored data later (ADR 0005 consequences).
 
-## Burn intensity — the player's control lever (Helm burn selector).
-enum Burn { ECONOMY, STANDARD, HARD }
+## Burn intensity — the player's control lever (Helm throttle). Five tiers; the two
+## extra tiers are appended (not reordered) so existing saved `burn` ints are stable.
+enum Burn { ECONOMY, STANDARD, HARD, CRUISE, FLANK }
+
+## The five tiers low → high (throttle order), for the Helm throttle pill.
+const BY_SPEED: Array[int] = [Burn.ECONOMY, Burn.CRUISE, Burn.STANDARD, Burn.HARD, Burn.FLANK]
 
 ## Warp 1 = the speed of light: light crosses 1 AU in this many ticks (one tick =
 ## one in-game minute; real value ~8.3, rounded to 8). So Warp 1 in wu/tick is
@@ -25,8 +29,10 @@ const LIGHT_MINUTES_PER_AU: float = 8.0
 ## burn. Speeds derive from these — tuning knobs.
 const _WARP_FACTOR: Dictionary = {
 	Burn.ECONOMY: 0.5,
+	Burn.CRUISE: 0.75,
 	Burn.STANDARD: 1.0,
-	Burn.HARD: 2.0,
+	Burn.HARD: 1.5,
+	Burn.FLANK: 2.0,
 }
 
 ## Reaction mass (RM) spent per world unit travelled. Tuned (against the AU-scale
@@ -34,8 +40,10 @@ const _WARP_FACTOR: Dictionary = {
 ## needs a refuel stop on the faster burns.
 const _RM_PER_WU: Dictionary = {
 	Burn.ECONOMY: 0.0018,
+	Burn.CRUISE: 0.0024,
 	Burn.STANDARD: 0.0030,
-	Burn.HARD: 0.0052,
+	Burn.HARD: 0.0040,
+	Burn.FLANK: 0.0052,
 }
 
 

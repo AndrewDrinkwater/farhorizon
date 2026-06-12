@@ -22,7 +22,7 @@ a mission clock. Being rebuilt deliberately from scratch; α0.1 = "The Ship Flie
 - `docs/landing.md` — land/take-off, atmosphere (Earth atm), surface locations +
   planetary navigation: data shapes, `LandingMath`/`SurfaceMath` contracts,
   example content (ADR 0029/0030; **built**).
-- `docs/adr/0001..0033` — one decision per file. **If you change a decision,
+- `docs/adr/0001..0035` — one decision per file. **If you change a decision,
   add/supersede an ADR.**
 - `DEVLOG.md` — append a short entry per work session (newest on top).
 

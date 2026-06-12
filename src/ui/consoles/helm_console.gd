@@ -17,7 +17,11 @@ const OrreryViewScene := preload("res://src/world/orrery_view.gd")
 const TacticalViewScene := preload("res://src/world/tactical_view.gd")
 const SurfaceViewScene := preload("res://src/world/surface_view.gd")
 const MoonInsetViewScene := preload("res://src/world/moon_inset_view.gd")
+const NavBackdropScene := preload("res://src/world/nav_backdrop.gd")
 
+var _frame: ConsoleFrame  # the ship-OS layout (ADR 0034): left / right / deck slots
+var _stage: Control  # clip box bounding the nav views to the plot region (ADR 0035)
+var _backdrop: NavBackdrop  # idle instrument backdrop behind the nav views (ADR 0035)
 var _orrery: OrreryView
 var _tactical: TacticalView
 var _surface: SurfaceView
@@ -49,12 +53,15 @@ var _target_readout: TReadout
 var _distance_readout: TReadout
 var _eta_readout: TReadout
 var _rm_readout: TReadout
-var _burn_buttons: Dictionary = {}  # burn:int -> TButton
-var _scale_switch: CheckButton  # context toggle above the Course Order box (orrery scale / scope rings)
+var _throttle: ThrottlePill  # 5-tier burn throttle in the Control panel (ADR 0035)
+var _scale_switch: CheckButton  # context toggle on the map (orrery scale / scope rings)
 var _scale_caption: Label
+var _scale_value: Label         # fixed-width mode label so the control never resizes/clips
+var _scale_overlay: PanelContainer  # the scale toggle, floated bottom-centre on the map
+var _map_controls: Control          # Lock-on-ship / Fit controls, top-left on the map (orrery only)
 var _pip_readout: TReadout      # between-pip distance/time legend (ADR 0019)
 var _action_buttons: Dictionary = {}  # order id:String -> TButton
-var _cluster_boxes: Dictionary = {}   # cluster name:String -> VBoxContainer (ADR 0032)
+var _control_deck: ControlDeck        # the deck of command Sections (ADR 0034)
 
 # Nav contacts directory (ADR 0032): a filterable hierarchy of bodies + contacts.
 var _dir_list: VBoxContainer
@@ -97,35 +104,34 @@ func _ready() -> void:
 	offset_right = 0.0
 	offset_bottom = 0.0
 	mouse_filter = Control.MOUSE_FILTER_IGNORE  # let map clicks through; panels still catch theirs
-	_build_stage()        # nav views first → drawn behind the panels (ADR 0031)
-	_build_course_order()
-	_build_controls()     # clustered action buttons (ADR 0032)
-	_build_directory()    # nav contacts directory (ADR 0032)
-	_build_scale_toggle()
-	_build_flight_status()
-	_build_target_info()
-	_build_transition_indicators()  # altitude / dock approach (ADR 0033)
-	_build_inset()        # focus inset draws over the panels (ADR 0022)
+	_build_stage()        # nav views first → drawn behind the frame (ADR 0031)
+	_frame = ConsoleFrame.new()  # ship-OS layout (ADR 0034): fixed boxes, console fills them
+	add_child(_frame)
+	# Bound the nav plot to the region between the drawers (ADR 0035): re-push on any
+	# layout change (drawer toggle, window resize) so it fills/centres that region.
+	_frame.centre().resized.connect(_push_view_region)
+	# The frame's fixed boxes — the Helm only sets each title and pours content in.
+	_build_course_order()   # → secondary box
+	_build_controls()       # clustered orders (ADR 0032) → control box
+	_build_scale_overlay()  # scale/view toggle floated bottom-centre on the map (ADR 0035)
+	_build_map_controls()   # Lock-on-ship / Fit, top-left on the map (ADR 0035)
+	_build_directory()      # nav contacts directory (ADR 0032) → left drawer
+	_build_flight_status()  # → info box (bottom-right); ack line → toast
+	_build_target_info()    # → right drawer
+	_build_transition_indicators()  # altitude / dock approach (ADR 0033) → toast
+	_build_inset()          # focus inset draws over the panels (ADR 0022)
 	_connect_bus()
 	_refresh_all()
 	_update_nav_views()
 	EventBus.nav_burn_changed.emit(_burn)  # sync the nav views to the starting burn (ADR 0019)
 	EventBus.nav_scale_changed.emit(_scale)  # sync the orrery to the starting scale (ADR 0021)
 	EventBus.nav_ring_mode_changed.emit(_ring_mode)  # sync the scope's ring mode
+	_push_view_region.call_deferred()  # bound the plot to the centre region once laid out (ADR 0035)
 
 
-# --- Layout helpers ---
-
-func _place(ctrl: Control, al: float, at: float, ar: float, ab: float,
-		ol: float, ot: float, oright: float, ob: float) -> void:
-	ctrl.anchor_left = al
-	ctrl.anchor_top = at
-	ctrl.anchor_right = ar
-	ctrl.anchor_bottom = ab
-	ctrl.offset_left = ol
-	ctrl.offset_top = ot
-	ctrl.offset_right = oright
-	ctrl.offset_bottom = ob
+## The shell mounts the console-select tabs here — just above the control panel (ADR 0034).
+func console_select_host() -> Control:
+	return _frame.console_select()
 
 
 # --- Nav-view stage (ADR 0031, moved from the shell root) ---
@@ -135,16 +141,24 @@ func _build_stage() -> void:
 	var system := TypeRegistry.get_system(GameState.system.system_id)
 	if system == null:
 		return
+	# A clip Control bounds the stage to the plot region so the map can never be
+	# dragged/zoomed past its display box (ADR 0035). Views draw in its local space.
+	_stage = Control.new()
+	_stage.clip_contents = true
+	_stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_stage)
+	_backdrop = NavBackdropScene.new()  # idle instrument backdrop, behind all views (ADR 0035)
+	_stage.add_child(_backdrop)
 	_orrery = OrreryViewScene.new()
-	add_child(_orrery)
+	_stage.add_child(_orrery)
 	_orrery.build(system)
 	_tactical = TacticalViewScene.new()
 	_tactical.visible = false
-	add_child(_tactical)
+	_stage.add_child(_tactical)
 	_tactical.build(system)
 	_surface = SurfaceViewScene.new()
 	_surface.visible = false
-	add_child(_surface)
+	_stage.add_child(_surface)
 	_surface.build(system)
 
 
@@ -179,38 +193,42 @@ func _update_nav_views() -> void:
 	_surface.visible = surface_on
 	_orrery.visible = not surface_on and not _tactical_active
 	_tactical.visible = not surface_on and _tactical_active
+	if _backdrop != null:
+		_backdrop.visible = not surface_on  # the scope/orrery backdrop, not the surface map
+	if _map_controls != null:
+		_map_controls.visible = _orrery.visible  # lock/fit apply to the orrery only
+	if _scale_overlay != null:
+		_scale_overlay.visible = not surface_on  # scale (orrery) / rings (scope), not surface
+
+
+## Push the plot region (the area between the drawers) to every nav view + backdrop
+## so they centre/bound to it and grow when a drawer retracts (ADR 0035).
+func _push_view_region() -> void:
+	if _orrery == null or _frame == null:
+		return
+	var region := _frame.centre().get_global_rect()
+	if region.size.x <= 0.0 or region.size.y <= 0.0:
+		return
+	# Position + size the clip box to the region; the views draw in its local space.
+	_stage.global_position = region.position
+	_stage.size = region.size
+	var local := Rect2(Vector2.ZERO, region.size)
+	_orrery.set_view_rect(local)
+	_tactical.set_view_rect(local)
+	_surface.set_view_rect(local)
+	_backdrop.set_view_rect(local)
 
 
 # --- Course Order region (compose + issue) ---
 
 func _build_course_order() -> void:
-	var panel := TPanel.new("HELM_COURSE_ORDER")
-	add_child(panel)
-	_place(panel, 0.0, 1.0, 0.0, 1.0, 16.0, -300.0, 380.0, -16.0)
-	var c := panel.content()
+	_frame.secondary().set_title("HELM_COURSE_ORDER")
+	var c := _frame.secondary().content()
 
 	_target_readout = TReadout.new("HELM_TARGET")
 	c.add_child(_target_readout)
 
-	var burn_row := HBoxContainer.new()
-	burn_row.add_theme_constant_override("separation", 4)
-	c.add_child(burn_row)
-	var burn_caption := Label.new()
-	burn_caption.text = tr("HELM_BURN_LABEL")
-	burn_caption.add_theme_color_override("font_color", Palette.TEXT_DIM)
-	burn_caption.custom_minimum_size = Vector2(110.0, 0.0)
-	burn_row.add_child(burn_caption)
-	for entry: Array in [
-		[FlightMath.Burn.ECONOMY, "HELM_BURN_ECONOMY"],
-		[FlightMath.Burn.STANDARD, "HELM_BURN_STANDARD"],
-		[FlightMath.Burn.HARD, "HELM_BURN_HARD"],
-	]:
-		var burn: int = entry[0]
-		var button := TButton.new()
-		button.setup(entry[1], _select_burn.bind(burn))
-		burn_row.add_child(button)
-		_burn_buttons[burn] = button
-
+	# Burn intensity now lives on the throttle pill in the Control panel (ADR 0035).
 	_distance_readout = TReadout.new("HELM_DISTANCE")
 	c.add_child(_distance_readout)
 	_eta_readout = TReadout.new("HELM_ETA")
@@ -232,67 +250,110 @@ func _build_course_order() -> void:
 	_refresh_burn_buttons()
 
 
-## Controls panel (ADR 0032): actions in labelled clusters — Flight / Docking /
-## Surface / Sensors. A whole cluster hides when it doesn't apply (HelmGroups);
-## buttons within a visible cluster grey via Travel.available. Bottom-centre band.
+## The control deck (ADR 0034): the command Sections — Flight / Docking / Surface
+## / Sensors — built from a descriptor and fed into a reusable ControlDeck. A whole
+## section hides when it doesn't apply (HelmGroups, ADR 0032); buttons within a
+## visible section grey via Travel.available. The deck sizes to its tallest section
+## — no fixed band to overhang.
 func _build_controls() -> void:
-	var panel := TPanel.new("HELM_CONTROLS")
-	add_child(panel)
-	_place(panel, 0.0, 1.0, 1.0, 1.0, 400.0, -210.0, -400.0, -16.0)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 16)
-	panel.content().add_child(row)
-	_add_cluster(row, "flight", "HELM_GRP_FLIGHT", [
-		["lay_in", "HELM_LAY_IN_COURSE", _lay_in_course], ["engage", "HELM_ENGAGE", _engage],
-		["belay", "HELM_BELAY", _belay], ["all_stop", "HELM_ALL_STOP", _all_stop],
-		["clear_course", "HELM_CLEAR_COURSE", _clear_route],
-	])
-	_add_cluster(row, "docking", "HELM_GRP_DOCKING", [
-		["dock", "HELM_DOCK", _dock], ["undock", "HELM_UNDOCK", _undock],
-	])
-	_add_cluster(row, "surface", "HELM_GRP_SURFACE", [
-		["land", "HELM_LAND", _land], ["take_off", "HELM_TAKE_OFF", _take_off],
-		["move", "HELM_MOVE", _move],
-	])
-	_add_cluster(row, "sensors", "HELM_GRP_SENSORS", [
-		["scan", "HELM_SCAN", _scan], ["focus", "HELM_FOCUS", _focus],
-	])
+	_frame.control().set_title("HELM_CONTROLS")
+	_frame.control().set_role(TPanel.Role.CONTROL)  # raised control bank (ADR 0035)
+	# Throttle pill on the left, command clusters filling the rest (ADR 0035).
+	var rowbox := HBoxContainer.new()
+	rowbox.add_theme_constant_override("separation", 18)
+	rowbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_frame.control().content().add_child(rowbox)
+	_throttle = ThrottlePill.new().setup(_select_burn)
+	rowbox.add_child(_throttle)
+	_control_deck = ControlDeck.new()  # the sections row; the frame owns the fixed box
+	rowbox.add_child(_control_deck)
+	for spec: Dictionary in _deck_sections():
+		var section := Section.new(spec["id"], spec["header"])
+		for a: Array in spec["actions"]:
+			section.add_widget(_make_action(a[0], a[1], a[2]))
+		_control_deck.add_section(section)
+	# The one commit action per context reads as primary (filled accent, ADR 0035).
+	for id: String in ["engage", "land", "dock"]:
+		if _action_buttons.has(id):
+			(_action_buttons[id] as TButton).make_primary()
 
 
-## One labelled cluster: a header over its buttons, stored so it can hide wholesale.
-func _add_cluster(parent: HBoxContainer, name: String, header_key: String, actions: Array) -> void:
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 4)
-	parent.add_child(box)
-	var header := Label.new()
-	header.text = tr(header_key)
-	header.add_theme_color_override("font_color", Palette.TEXT_DIM)
-	box.add_child(header)
-	for a: Array in actions:
-		box.add_child(_make_action(a[0], a[1], a[2]))
-	_cluster_boxes[name] = box
+## Code-built deck descriptor (ADR 0034): each section's id (for the visibility
+## resolver), header, and its order buttons [id, label key, action callable].
+func _deck_sections() -> Array[Dictionary]:
+	return [
+		{"id": "flight", "header": "HELM_GRP_FLIGHT", "actions": [
+			["lay_in", "HELM_LAY_IN_COURSE", _lay_in_course], ["engage", "HELM_ENGAGE", _engage],
+			["belay", "HELM_BELAY", _belay], ["all_stop", "HELM_ALL_STOP", _all_stop],
+			["clear_course", "HELM_CLEAR_COURSE", _clear_route],
+		]},
+		{"id": "docking", "header": "HELM_GRP_DOCKING", "actions": [
+			["dock", "HELM_DOCK", _dock], ["undock", "HELM_UNDOCK", _undock],
+		]},
+		{"id": "surface", "header": "HELM_GRP_SURFACE", "actions": [
+			["land", "HELM_LAND", _land], ["take_off", "HELM_TAKE_OFF", _take_off],
+			["move", "HELM_MOVE", _move], ["abort_land", "HELM_ABORT_LAND", _abort_landing],
+		]},
+		{"id": "sensors", "header": "HELM_GRP_SENSORS", "actions": [
+			["scan", "HELM_SCAN", _scan], ["focus", "HELM_FOCUS", _focus],
+		]},
+	]
 
 
-## A toggle switch above the Course Order box that flips the orrery scale mode
-## (ADR 0021/0023) — a CheckButton (slide switch) showing the current mode.
-func _build_scale_toggle() -> void:
-	var box := PanelContainer.new()
-	add_child(box)
-	_place(box, 0.0, 1.0, 0.0, 1.0, 16.0, -342.0, 380.0, -306.0)
+## The scale/view toggle (ADR 0021/0023) lives ON the map (ADR 0035): a small
+## control floated in the top-left of the centre screen — a view control belongs on
+## the view it controls, not in the order compose box. A CheckButton showing the
+## current orrery scale (or the scope's ring mode when the tactical view is active).
+func _build_scale_overlay() -> void:
+	_scale_overlay = PanelContainer.new()
+	_scale_overlay.add_theme_stylebox_override("panel", TerminalTheme.bank_box())
+	_scale_overlay.custom_minimum_size = Vector2(240.0, 0.0)  # fixed — never resizes with the label
+	_frame.centre().add_child(_scale_overlay)
+	# Bottom-centre of the map, content-sized height, pinned above the band.
+	_scale_overlay.anchor_left = 0.5
+	_scale_overlay.anchor_right = 0.5
+	_scale_overlay.anchor_top = 1.0
+	_scale_overlay.anchor_bottom = 1.0
+	_scale_overlay.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_scale_overlay.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_scale_overlay.offset_bottom = -10.0
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
-	box.add_child(row)
+	_scale_overlay.add_child(row)
 	_scale_caption = Label.new()
+	_scale_caption.custom_minimum_size = Vector2(46.0, 0.0)
 	_scale_caption.add_theme_color_override("font_color", Palette.TEXT_DIM)
 	row.add_child(_scale_caption)
+	# Fixed-width mode label + a toggle-only switch → the control never resizes or
+	# clips its text as the mode changes (ADR 0035).
+	_scale_value = Label.new()
+	_scale_value.custom_minimum_size = Vector2(100.0, 0.0)
+	row.add_child(_scale_value)
 	_scale_switch = CheckButton.new()
 	_scale_switch.toggled.connect(_on_scale_toggled)
 	row.add_child(_scale_switch)
 	_refresh_toggle()
 
 
+## Lock-on-ship / Fit controls floated in the map's top-left (orrery only, ADR 0035).
+func _build_map_controls() -> void:
+	_map_controls = PanelContainer.new()
+	_map_controls.add_theme_stylebox_override("panel", TerminalTheme.bank_box())
+	_frame.centre().add_child(_map_controls)
+	_map_controls.anchor_left = 0.0
+	_map_controls.anchor_top = 0.0
+	_map_controls.offset_left = 28.0  # clear of the corner bracket
+	_map_controls.offset_top = 10.0
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	_map_controls.add_child(row)
+	row.add_child(TButton.new().setup("HELM_MAP_LOCK", _orrery.lock_on_ship))
+	row.add_child(TButton.new().setup("HELM_MAP_FIT", _orrery.fit_system))
+
+
 func _make_action(id: String, label_key: String, on_press: Callable) -> TButton:
 	var button := TButton.new().setup(label_key, on_press)
+	button.custom_minimum_size = Vector2(132.0, 0.0)  # uniform width → a substantial bar
 	_action_buttons[id] = button
 	return button
 
@@ -300,10 +361,8 @@ func _make_action(id: String, label_key: String, on_press: Callable) -> TButton:
 # --- Flight Status region (live readouts) ---
 
 func _build_flight_status() -> void:
-	var panel := TPanel.new("HELM_FLIGHT_STATUS")
-	add_child(panel)
-	_place(panel, 1.0, 0.0, 1.0, 0.0, -380.0, 16.0, -16.0, 220.0)
-	var c := panel.content()
+	_frame.info().set_title("HELM_FLIGHT_STATUS")  # bottom-right Info box (ADR 0034)
+	var c := _frame.info().content()
 
 	_status_light = TLight.new("HELM_STATUS")
 	c.add_child(_status_light)
@@ -315,34 +374,39 @@ func _build_flight_status() -> void:
 	c.add_child(_fuel_gauge)
 	_fuel_gauge.bind(_fuel_data)
 
-	# Transient ship-voice line (ADR 0025): an ack/reject shows here then fades.
+	# Transient ship-voice line (ADR 0025): an ack/reject flashes in the top-centre
+	# notification toast (ADR 0034), then fades. It needs an explicit width — the
+	# toast is content-sized, so autowrap with no width would wrap per character.
 	_ack_line = Label.new()
+	_ack_line.custom_minimum_size = Vector2(520.0, 0.0)
 	_ack_line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_ack_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_ack_line.add_theme_color_override("font_color", Palette.STATUS_INFO)
 	_ack_line.modulate.a = 0.0
-	c.add_child(_ack_line)
+	_frame.toast().add_child(_ack_line)
 
 
 # --- Target Information region (ADR 0025): replaces the Order Log ---
 
 func _build_target_info() -> void:
-	var panel := TPanel.new("HELM_TARGET_INFO")
-	add_child(panel)
-	_place(panel, 1.0, 1.0, 1.0, 1.0, -380.0, -300.0, -16.0, -16.0)
-	var c := panel.content()
-	_ti_name = TReadout.new("HELM_TI_NAME")
+	_frame.right().set_title("HELM_TARGET_INFO")  # right drawer (ADR 0034)
+	_frame.set_drawer_label(false, tr("HELM_TI_TAB"))
+	var c := _frame.right().content()
+	# .fill() so long target values wrap within the drawer rather than widening it —
+	# keeps the right drawer the same fixed width as the left (ADR 0035).
+	_ti_name = TReadout.new("HELM_TI_NAME").fill()
 	c.add_child(_ti_name)
-	_ti_type = TReadout.new("HELM_TI_TYPE")
+	_ti_type = TReadout.new("HELM_TI_TYPE").fill()
 	c.add_child(_ti_type)
-	_ti_dist = TReadout.new("HELM_TI_DIST")
+	_ti_dist = TReadout.new("HELM_TI_DIST").fill()
 	c.add_child(_ti_dist)
-	_ti_eta = TReadout.new("HELM_ETA")
+	_ti_eta = TReadout.new("HELM_ETA").fill()
 	c.add_child(_ti_eta)
-	_ti_rm = TReadout.new("HELM_TI_RM")
+	_ti_rm = TReadout.new("HELM_TI_RM").fill()
 	c.add_child(_ti_rm)
-	_ti_status = TReadout.new("HELM_TI_STATUS")
+	_ti_status = TReadout.new("HELM_TI_STATUS").fill()
 	c.add_child(_ti_status)
-	_ti_route = TReadout.new("HELM_TI_ROUTE")
+	_ti_route = TReadout.new("HELM_TI_ROUTE").fill()
 	c.add_child(_ti_route)
 
 
@@ -352,8 +416,8 @@ func _build_target_info() -> void:
 ## bar (dock/undock); shown only during the matching transition.
 func _build_transition_indicators() -> void:
 	_transition_panel = TPanel.new("")
-	add_child(_transition_panel)
-	_place(_transition_panel, 0.5, 0.0, 0.5, 0.0, -130.0, 56.0, 130.0, 320.0)
+	_transition_panel.custom_minimum_size = Vector2(260.0, 0.0)
+	_frame.toast().add_child(_transition_panel)  # top-centre notification toast (ADR 0034)
 	_transition_panel.visible = false
 	var c := _transition_panel.content()
 	_alt_indicator = AltitudeIndicator.new()
@@ -402,10 +466,9 @@ func _transition_progress() -> float:
 ## A filterable hierarchy of all targets (charted bodies + detected contacts) down
 ## the left edge; selecting an entry drives nav_target_selected → Target Info + plot.
 func _build_directory() -> void:
-	var panel := TPanel.new("HELM_DIRECTORY")
-	add_child(panel)
-	_place(panel, 0.0, 0.0, 0.0, 1.0, 16.0, 56.0, 348.0, -352.0)
-	var c := panel.content()
+	_frame.left().set_title("HELM_DIRECTORY")  # left drawer (ADR 0034)
+	_frame.set_drawer_label(true, tr("HELM_DIR_TAB"))
+	var c := _frame.left().content()
 
 	var cat_row := HBoxContainer.new()
 	cat_row.add_theme_constant_override("separation", 4)
@@ -741,12 +804,12 @@ func _refresh_toggle() -> void:
 	if _tactical_active:
 		_scale_caption.text = tr("HELM_RINGS_LABEL")
 		_scale_switch.set_pressed_no_signal(_ring_mode == TacticalView.RingMode.DISTANCE)
-		_scale_switch.text = tr("HELM_RINGS_DIST") if _ring_mode == TacticalView.RingMode.DISTANCE \
+		_scale_value.text = tr("HELM_RINGS_DIST") if _ring_mode == TacticalView.RingMode.DISTANCE \
 			else tr("HELM_RINGS_ETA")
 	else:
 		_scale_caption.text = tr("HELM_SCALE_LABEL")
 		_scale_switch.set_pressed_no_signal(_scale == OrreryParams.ScaleMode.LINEAR)
-		_scale_switch.text = tr("HELM_SCALE_TRUE") if _scale == OrreryParams.ScaleMode.LINEAR \
+		_scale_value.text = tr("HELM_SCALE_TRUE") if _scale == OrreryParams.ScaleMode.LINEAR \
 			else tr("HELM_SCALE_SCHEMATIC")
 
 
@@ -834,6 +897,15 @@ func _land() -> void:
 	EventBus.order_issued.emit({"type": "land", "site_id": "", "pos": _surface_target_pos})
 
 
+## Back out of landing-spot selection without committing — return to the orbit view
+## (ADR 0030 fix): the captain is no longer forced to land once the map is open.
+func _abort_landing() -> void:
+	_picking_landing = false
+	_sync_surface_map()  # show == false now → hides the surface map, back to the orrery
+	_show_ack(CrewVoice.SHIP_VOICE, "VOICE_LANDING_ABORTED")
+	_refresh_actions()
+
+
 func _take_off() -> void:
 	EventBus.order_issued.emit({"type": "take_off"})
 
@@ -853,8 +925,8 @@ func _refresh_all() -> void:
 
 
 func _refresh_burn_buttons() -> void:
-	for burn: int in _burn_buttons:
-		_burn_buttons[burn].modulate = Palette.ACCENT if burn == _burn else Color.WHITE
+	if _throttle != null:
+		_throttle.set_burn(_burn)
 
 
 ## Between-pip legend: one course-line pip spans PIP_TICKS minutes; show the
@@ -879,10 +951,12 @@ func _refresh_actions() -> void:
 	if _action_buttons.has("clear_course"):
 		_action_buttons["clear_course"].disabled = _sel_kind == Travel.TargetKind.NONE \
 			and _route_waypoints.is_empty() and not _has_course()
-	# Hide whole clusters that don't apply to the situation (ADR 0032).
-	var groups := HelmGroups.visible_groups(_context())
-	for name: String in _cluster_boxes:
-		_cluster_boxes[name].visible = bool(groups.get(name, true))
+	# Abort Landing is a UI escape from spot-selection, only shown while picking (ADR 0030).
+	if _action_buttons.has("abort_land"):
+		_action_buttons["abort_land"].visible = _picking_landing
+		_action_buttons["abort_land"].disabled = not _picking_landing
+	# Hide whole sections that don't apply to the situation (ADR 0032/0034).
+	_control_deck.apply_visibility(HelmGroups.visible_groups(_context()))
 	_refresh_site_picker()
 	_refresh_directory()
 

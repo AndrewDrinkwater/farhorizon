@@ -24,6 +24,21 @@ func setup_text(label: String, on_press: Callable) -> TButton:
 	return self
 
 
+## Mark this as the primary / commit action (ADR 0035): a filled-accent, heavier
+## button — used for the one commit per context (Engage; Land / Dock). Dark text on
+## the accent fill; a muted fill when disabled so it doesn't read as live.
+func make_primary() -> TButton:
+	add_theme_stylebox_override("normal", TerminalTheme.primary_button_box(Palette.ACCENT.darkened(0.15)))
+	add_theme_stylebox_override("hover", TerminalTheme.primary_button_box(Palette.ACCENT))
+	add_theme_stylebox_override("pressed", TerminalTheme.primary_button_box(Palette.ACCENT.darkened(0.35)))
+	add_theme_stylebox_override("disabled", TerminalTheme.primary_button_box(Palette.PANEL.darkened(0.2)))
+	add_theme_color_override("font_color", Palette.BG)
+	add_theme_color_override("font_hover_color", Palette.BG)
+	add_theme_color_override("font_pressed_color", Palette.BG)
+	add_theme_color_override("font_disabled_color", Palette.TEXT_DIM)
+	return self
+
+
 func _emit() -> void:
 	if _on_press.is_valid():
 		_on_press.call()

@@ -4,6 +4,149 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-11 — Build: console control-feel / instrument polish (ADR 0035)
+
+Presentation pass at the theme + `T*` component level so every console inherits a
+control-console feel instead of a flat dashboard. No game logic / core / save /
+EventBus changes. **213 GUT tests green; boots clean.** ADR 0035 confirmed (amends
+ADR 0006 — allows panel *roles* + instrument styling, still no drawn cockpit).
+
+- **Panel roles.** `TPanel` gained a role (recessed **screen** vs raised **control
+  bank**) + a header strip carrying the title and a small live lamp; `Palette`
+  added `SCREEN_BG` / `BANK_BG` / `HEADER_BG` / `GAUGE_TRACK`; `TerminalTheme`
+  added `screen_box` / `bank_box` / `header_box`. The Helm's command box is a
+  control bank; readout boxes are screens.
+- **Instruments over text.** `TGauge` is now a segmented bar that shifts amber → red
+  below caution/alert thresholds (default low-is-bad; the fuel gauge picks it up);
+  a **status-lamp row** (FLT / SENS / DOCK / CAUTION) sits in the top bar, each lamp
+  carrying state by glyph **and** colour (ADR 0012); all numeric readouts route
+  through a **mono face** (`TerminalTheme.mono_font` — a SystemFont preferring Share
+  Tech Mono, falling back to Consolas/Courier).
+- **Button hierarchy.** `TButton.make_primary()` — filled-accent, heavier — applied
+  to the one commit action per context (Engage, Land, Dock); the rest stay secondary.
+- **Idle backdrop + framed central viewer.** New `NavBackdrop` draws a faint grid +
+  cross-hair + centre reticle + a faint frame behind the orrery/scope, so the nav
+  plot reads as a powered, contained display, never black void (hidden under the
+  surface map). The three nav views (`OrreryView` / `TacticalView` / `SurfaceView`)
+  gained `set_view_rect()` and now centre/bound to the **region between the drawers**
+  (the frame's `centre()` rect, re-pushed on drawer toggle + resize) rather than the
+  full viewport — so the plot fills that region and grows sideways as drawers retract.
+  (Range rings were tried in the backdrop and removed — they competed with the
+  orrery's real orbit rings.)
+- **Honest placeholders.** Ship/Engineering's not-yet-built bottom boxes show an
+  explicit centred "○ OFFLINE — NO DATA" instead of blank bordered rectangles.
+
+New strings: `LAMP_FLT/SENS/DOCK/CAUTION`, `SHIP_OFFLINE`. Feel/density tuning
+(thresholds, backdrop density, lamp set) is in-engine by F5.
+
+---
+
+## 2026-06-10 — Design: console control-feel pass (ADR 0035)
+
+Design session (no code). The console shell shipped as uniform dark panels — a
+dashboard, not a ship console. Specced an **instrument-polish theme/component
+pass** (no game logic), amending ADR 0006's "no bezel/uniform" stance to allow
+distinct panel *roles* + instrument styling (still no drawn cockpit — that's
+backlogged):
+
+- **Panel roles:** screens (nav plot, readouts — inset, live-lamp header) vs
+  control banks (raised). The **nav plot becomes the hero** with an idle backdrop
+  (cross-hair/grid, range rings, centred ship marker) instead of black void.
+- **Instruments over text:** vitals as `TGauge` (thresholds), a `TLight` status-
+  lamp row (FLT/SENS/DOCK/CAUTION), all numerics in the mono face.
+- **Button hierarchy:** a primary/commit `TButton` variant (Engage/Land/Dock) vs
+  secondary; clusters as labelled banks.
+- **Honest placeholders:** stub panels show an "offline/no data" state, not blank
+  boxes. Tighter density.
+
+All in `TerminalTheme` + `Palette` + the `T*` components, so every console
+inherits it; accessibility preserved (ADR 0012). Chosen now (before more nav
+features) so later work inherits the feel.
+
+---
+
+## 2026-06-10 — Build: console frame — the data-driven ship-OS layout (ADR 0034)
+
+Generalised the per-console ad-hoc `_place(...)` layout into one reusable frame
+every department shares. Designed + built in three runnable steps; GUT green +
+clean boot at each. **213 GUT tests green.** ADR 0034 accepted; `docs/console-frame.md`.
+
+Started from a captain bug report — the Helm Flight control box overhung the
+bottom of the screen — which exposed the real problem: each console hand-placed
+panels at magic pixel offsets, so a too-short fixed band spilled its content. The
+fix is structural, not a nudge.
+
+1. **Frame skeleton + global top bar.** New **`ConsoleFrame`**: container-driven
+   regions over a mouse-transparent CENTRE the Node2D nav stage shows through. No
+   pixel offsets — regions size to content, so the overhang class is designed out.
+   New shell-global **`TopBar`** (folds in `TimeControls`): mission clock + watch
+   speed, reaction-mass / hull / system readouts. `_place` deleted from the Helm.
+2. **Data-driven control panel.** New **`Section`** (a titled widget cluster that
+   hides wholesale) + **`ControlDeck`** (a panel of sections hidden per a
+   visibility map). The Helm's Flight / Docking / Surface / Sensors clusters now
+   come from a **code-built descriptor** (`_deck_sections`) fed into the panel;
+   visibility still resolves through the pure, tested `HelmGroups`. One reusable
+   container ready to hold scan/probe orders when those consoles land.
+3. **Collapsible drawers + Ship onto the frame.** Each side is a **drawer**: a thin
+   edge handle (shown only when the side has content) collapses/expands the column.
+   **Ship/Engineering** now uses the same frame — live systems left, TBD subsystems
+   right. New `test_console_frame.gd`; `TOPBAR_HULL` / `TOPBAR_SYSTEM` /
+   `SHIP_SUBSYSTEMS` strings.
+
+**Layout pass (against a captain mockup).** Fixed the frame collapsing to half
+width — `set_anchors_preset` is unreliable in this engine, so the frame now sets
+anchors explicitly (the `TopBar` already did, which is why it spanned correctly).
+Then matched the mockup's region model and made it **frame-owned + fixed**: the
+`ConsoleFrame` now owns **five fixed-size boxes** (left/right drawers + a bottom
+band of Secondary · Control · Info); a console only `set_title()`s a box and pours
+content into its `content()` — the boxes never change size or position, so every
+console reads identically (Ship shows the same boxes, its bottom row simply empty)
+and the **console-select bar** above the control box never shifts. `TPanel` gained
+`set_title()`; `ControlDeck` became a content row (HBox of Sections) inside the
+fixed control box. Ship-voice acks + transition indicators float in a **top-centre
+toast**; the **console-select tabs** moved out of the top bar to a bar just above
+the control box, mounted by the shell into the active console's frame slot
+(`console_select_host`). Drawers start collapsed (handle tab protruding) and clear
+the top bar; Nav Directory → left, Target Information → right, Flight Status → Info,
+Course Order (+ folded-in scale toggle) → Secondary, command clusters → Control.
+
+**Map & time interaction follow-ups (captain feel pass).**
+- **Framed, clipped central viewer.** The nav views are parented under a
+  `clip_contents` Control sized to the plot region (between the drawers) and draw in
+  its local space — the map can no longer be dragged/zoomed past its display box.
+  The backdrop lost its cross-hair/reticle (confusing) and keeps a faint grid +
+  screen fill + corner-bracket frame.
+- **Orrery Lock-on-ship / Fit.** Top-left map controls: **Lock Ship** centres on the
+  ship at max zoom and follows it; **Fit** re-centres on the star at fit zoom. Any
+  manual pan/zoom (or a scale/system change) breaks the lock.
+- **Tactical range zoom.** The scope is short-range sensors; scroll out once for a
+  long-range sweep capped at 15 AU (contacts still resolve only within real sensor
+  range), with a range readout in the scope's top-right.
+- **Scale toggle** moved to the map's **bottom-centre** at a fixed size; **RT**
+  (real-time, 1 in-game minute per real minute) added beside 1× in the top bar.
+- **Persistent TravelBar.** Shell-global (`TravelBar` + `TravelTrack`): while a
+  course is under way it names the destination, glides a ship marker along the course
+  line (render-interpolated, smooth between ticks), and shows a live ETA — every console.
+- **Surface map contained** — a centred square (height-bounded, clipped) so location
+  markers stay central and can't end up under a drawer.
+- **Abort Landing** — a Surface-cluster action shown only during landing-spot
+  selection; backs out of the map to orbit so the captain isn't forced to commit.
+- **`TPanel` content now fills** below its header — fixes the Nav Directory (its
+  scroll list had collapsed to zero height and showed nothing).
+- Labelled drawer tabs (vertical name + arrow).
+- **Throttle pill.** `FlightMath.Burn` went 3 → **5 tiers** (Economy / Cruise /
+  Standard / Hard / Flank; new tiers appended so saved `burn` ints stay stable). The
+  three burn buttons are replaced by a vertical **`ThrottlePill`** (a 5-bar lever)
+  on the left of the Control panel.
+- **Scale control** rebuilt with a fixed-width mode label + toggle-only switch so it
+  never resizes or clips; **True-scale** now starts magnified (`LINEAR_DEFAULT_ZOOM`)
+  with a deeper `ZOOM_MAX`. **15-AU boundary ring** drawn on the scope in long-range.
+
+Descriptor stays code-built (typed, easy to iterate); promotion to authored
+`ConsoleLayoutData` `.tres` is a later, frame-transparent step (ADR 0034, deferred).
+
+---
+
 ## 2026-06-09 — Build: console shell + Helm groups/directory + dock timing (ADR 0031–0033)
 
 Built the nav-console batch in three steps, GUT green + clean boot at each.

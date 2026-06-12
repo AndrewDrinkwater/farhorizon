@@ -5,7 +5,6 @@ extends Node
 ## visible. System-side logic (flight, sensors, save) are plain nodes that talk
 ## via EventBus. The debug overlay sits on top.
 
-const TimeControlsScene := preload("res://src/ui/shell/time_controls.gd")
 const ConsoleShellScene := preload("res://src/ui/shell/console_shell.gd")
 const DebugOverlay := preload("res://src/ui/components/debug_overlay.gd")
 const DebugConsoleScene := preload("res://src/ui/components/debug_console.gd")
@@ -44,9 +43,9 @@ func _bootstrap_system() -> void:
 
 
 ## UI under a CanvasLayer + themed root Control (screen-fixed, inherits the
-## terminal theme). The console shell (ADR 0031) hosts the consoles + their stages;
-## the time controls are persistent chrome on top. Root ignores mouse so empty
-## clicks reach the active console's stage.
+## terminal theme). The console shell (ADR 0031) hosts the consoles + their stages
+## and the shell-global top bar (clock + resources + tabs, ADR 0034). Root ignores
+## mouse so empty clicks reach the active console's stage.
 func _build_ui() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -57,9 +56,4 @@ func _build_ui() -> void:
 	root.theme = TerminalTheme.build()
 	layer.add_child(root)
 
-	root.add_child(ConsoleShellScene.new())  # consoles + console bar (ADR 0031)
-
-	# Persistent terminal chrome: the mission clock + time controls (ADR 0006).
-	var time_controls := TimeControlsScene.new()
-	time_controls.position = Vector2(16.0, 12.0)
-	root.add_child(time_controls)
+	root.add_child(ConsoleShellScene.new())  # consoles + top bar (ADR 0031/0034)

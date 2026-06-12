@@ -26,6 +26,7 @@ var _selected_point: Vector2 = Vector2.ZERO  # picked free point (su)
 var _has_point_sel: bool = false       # a free point is the current pick
 var _has_selection: bool = false       # the captain has picked something this session
 var _rect: Rect2
+var _view_rect: Rect2 = Rect2()  # plot region between the drawers (ADR 0035); empty = full viewport
 var _su_origin: Vector2
 var _px_per_su: float = 1.0
 var _font: Font
@@ -84,12 +85,29 @@ func _process(_delta: float) -> void:
 
 # --- Rectangular map projection (su → screen, uniform scale, fitted) ---
 
+## Bound the map to a screen region (the area between the drawers, ADR 0035);
+## empty/zero rect falls back to the viewport.
+func set_view_rect(rect: Rect2) -> void:
+	_view_rect = rect
+	_recompute()
+	queue_redraw()
+
+
+func _region() -> Rect2:
+	if _view_rect.size.x > 0.0 and _view_rect.size.y > 0.0:
+		return _view_rect
+	return Rect2(Vector2.ZERO, get_viewport_rect().size)
+
+
 func _recompute() -> void:
-	var vp := get_viewport_rect().size
-	# A centred rectangle clear of the corner Helm panels.
-	var left := vp.x * 0.22
-	var top := 64.0
-	_rect = Rect2(left, top, vp.x - left * 2.0, maxf(200.0, vp.y - top - 312.0))
+	if _body == null:
+		return  # nothing landed yet; recomputed when a body is set (or the region changes)
+	# A centred SQUARE within the region (not the full wide area) so markers stay
+	# central and can never sit under a drawer (ADR 0035).
+	var region := _region()
+	var side := minf(region.size.x, region.size.y) - 32.0
+	var sq := Vector2(side, side)
+	_rect = Rect2(region.position + (region.size - sq) * 0.5, sq)
 	# Fit the su bounding box of every point into the frame, uniform scale, centred.
 	var lo := Vector2(-100.0, -100.0)
 	var hi := Vector2(100.0, 100.0)
@@ -206,7 +224,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not is_visible_in_tree() or _body == null:
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var mouse := get_viewport().get_mouse_position()
+		var mouse := get_local_mouse_position()
 		if not _rect.has_point(mouse):
 			return
 		var site := _site_at(mouse)
