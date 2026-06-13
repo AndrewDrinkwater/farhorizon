@@ -697,8 +697,16 @@ func _clear_route() -> void:
 
 
 ## On arrival the course is done — wipe the plot so it doesn't linger (ADR 0028).
+## Heading reached — the ship drifts. Keep the selection as a *proposal* (ghost),
+## never auto-engaged (ADR 0036): we don't wipe the plot, just refresh. Re-emitting
+## the route recomputes it from the arrival position (collapses if we arrived at the
+## selected target, leaving no proposal).
 func _on_course_completed() -> void:
-	_reset_plot()
+	_plot_laid_in = false
+	_refresh_preview()
+	_refresh_status()
+	_refresh_actions()
+	_emit_route()
 
 
 ## Reset the compose plot (selection + waypoints) and clear the views' highlight.
@@ -731,6 +739,9 @@ func _on_tick() -> void:
 	_tick_accum = 0.0  # restart the sub-tick accumulator (smooth transition progress)
 	_refresh_preview()
 	_refresh_status()
+	# Re-anchor the proposal to the ship so the ghost course tracks it (ADR 0036).
+	if _sel_kind != Travel.TargetKind.NONE:
+		_emit_route()
 
 
 func _on_fuel_changed(_pool: int, _value: float) -> void:

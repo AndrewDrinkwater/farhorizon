@@ -4,6 +4,26 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-12 — Heading vs proposal separation (ADR 0036)
+
+Untangled three concepts the nav UI had blurred into "the course": the **heading**
+(engaged course — where you're going), the **target** (selection — what you're
+inspecting), and the **proposal** (the plotted course to the selection). Flying to
+Tethys while clicking around made the inspected target read as the course, and
+arrival left a live-looking plot to it. **213 GUT tests green; boots clean.**
+
+One visual law (ADR 0036, amends ADR 0028): **solid = committed heading, ghost =
+proposal.** Both `OrreryView` and `TacticalView` now draw the engaged heading
+(solid) and the selection's proposal (dimmed/dashed ghost) as two layers at once,
+suppressing the proposal only when it coincides with the heading. The Helm no longer
+wipes the selection on arrival — the heading clears (drift) and the selection stays a
+proposal, re-emitted each tick so the ghost tracks the ship (collapsing to nothing if
+you arrived at the selected target). Engage still promotes a proposal to the heading
+(a deliberate redirect). No core/save/order-lifecycle changes — the data was already
+separate (`current_order` vs compose state).
+
+---
+
 ## 2026-06-11 — Build: console control-feel / instrument polish (ADR 0035)
 
 Presentation pass at the theme + `T*` component level so every console inherits a

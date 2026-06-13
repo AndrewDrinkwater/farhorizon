@@ -274,10 +274,11 @@ func _draw() -> void:
 	_proj = proj  # cache for the course endpoint (a moon's marker ≠ its raw projection)
 	_draw_zones()  # beneath bodies/contacts (ADR 0026); warped through the projection
 	_draw_rings(proj)
+	# Proposal (ghost) under the heading (solid) — two distinct layers (ADR 0036).
+	if _has_proposal():
+		_draw_plotted_course()   # the selection's proposed course — ghosted
 	if _under_way():
-		_draw_course()           # the engaged flight path (current_order)
-	else:
-		_draw_plotted_course()   # the editable plot (compose route), coloured by obstruction
+		_draw_course()           # the engaged heading — solid, over the proposal
 	for body: BodyData in _system.bodies:
 		_draw_body(body, proj[body.id])
 	_draw_contacts()
@@ -428,7 +429,7 @@ func _draw_course() -> void:
 	# sharpest near the star — and uniform sampling would kink it).
 	var route := _course_route(order)
 	var color := _route_color(route, Palette.ACCENT)  # engaged → solid
-	var dest := _dest_screen(route[route.size() - 1])
+	var dest := _dest_screen(route[route.size() - 1], String(order.get("target_id", "")))
 	_draw_route_legs(route, color, false, dest)
 	for i in range(route.size() - 1):
 		_draw_course_time(route[i], route[i + 1])  # time pips per leg
@@ -445,15 +446,22 @@ func _draw_course() -> void:
 func _draw_plotted_course() -> void:
 	if _preview_route.size() < 2:
 		return
-	# Plotted (not yet laid in) draws dashed; laid in draws solid — clearly distinct
-	# (ADR 0028). Obstruction red/amber still applies to either.
-	var color := _route_color(_preview_route, Palette.ACCENT)
-	var dest := _dest_screen(_preview_route[_preview_route.size() - 1])
-	_draw_route_legs(_preview_route, color, not _route_laid_in, dest)
-	for i in range(_preview_route.size() - 1):
-		_draw_course_time(_preview_route[i], _preview_route[i + 1])
-	for i in range(1, _preview_route.size() - 1):
-		draw_circle(_project_course_point(_preview_route[i]), WAYPOINT_HANDLE_PX, color)
+	# Anchor the proposal's start to the (interpolated) ship while under way so it
+	# shares the heading's apex instead of trailing the last tick (ADR 0036).
+	var route := _preview_route
+	if _under_way():
+		route = route.duplicate()
+		route[0] = _interp_ship()
+	# Proposal is always GHOSTED (dim) — only the engaged heading draws solid (ADR 0036);
+	# obstruction red/amber still applies, dashed until laid in (ADR 0028).
+	var base := _route_color(route, Palette.ACCENT)
+	var color := Color(base.r, base.g, base.b, 0.45)
+	var dest := _dest_screen(route[route.size() - 1], _selected_id)
+	_draw_route_legs(route, color, not _route_laid_in, dest)
+	for i in range(route.size() - 1):
+		_draw_course_time(route[i], route[i + 1])
+	for i in range(1, route.size() - 1):
+		draw_circle(_project_course_point(route[i]), WAYPOINT_HANDLE_PX, color)
 	draw_arc(dest, 8.0, 0.0, TAU, 24, color, 1.0, true)
 
 
@@ -475,6 +483,17 @@ func _route_color(route: PackedVector2Array, clear_color: Color) -> Color:
 
 func _under_way() -> bool:
 	return bool(GameState.ship.current_order.get("engaged", false))
+
+
+## Is there a proposal (plotted course) to draw? Always when one is composed, except
+## when it coincides with the active heading (no double-draw) — ADR 0036.
+func _has_proposal() -> bool:
+	if _preview_route.size() < 2:
+		return false
+	if not _under_way():
+		return true
+	var heading := _course_dest(GameState.ship.current_order)
+	return _preview_route[_preview_route.size() - 1].distance_to(heading) > 1.0
 
 
 ## The laid-in route as real points: ship → waypoints → destination.
@@ -502,12 +521,13 @@ func _draw_route_legs(route: PackedVector2Array, color: Color, dashed: bool, des
 			draw_polyline(pts, color, 1.5, true)
 
 
-## The screen point of a route's destination: a selected/target body's MARKER (so a
-## moon's cluster position is used, not its raw projection), else the plain projection.
-func _dest_screen(route_last_world: Vector2) -> Vector2:
-	var id := String(GameState.ship.current_order.get("target_id", "")) if _under_way() else _selected_id
-	if id != "" and _proj.has(id):
-		return _proj[id]
+## The screen point of a route's destination: if `target_id` is a charted body, its
+## MARKER (so a moon's cluster position is used, not its raw projection); else the
+## plain projection. Each course passes its OWN target — the heading the order's, the
+## proposal the selection's — so they never snap to each other's end (ADR 0036).
+func _dest_screen(route_last_world: Vector2, target_id: String) -> Vector2:
+	if target_id != "" and _proj.has(target_id):
+		return _proj[target_id]
 	return _project_course_point(route_last_world)
 
 
@@ -590,7 +610,10 @@ func _draw_course_time(ship_pos: Vector2, target_pos: Vector2) -> void:
 
 
 func _draw_ship() -> void:
-	var at := _project_real(_interp_ship())
+	# Project the ship with the PATH map (like the course line), not the raw body map:
+	# near the star the raw map clamps to the hub, snapping the marker off its path
+	# (ADR 0016/0023). This keeps the ship on the line it's flying.
+	var at := _project_course_point(_interp_ship())
 	var facing := _ship_facing()
 	var fwd := Vector2.from_angle(facing)
 	var side := fwd.orthogonal()

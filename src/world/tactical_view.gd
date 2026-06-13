@@ -215,10 +215,11 @@ func _draw() -> void:
 		_draw_distance_rings()
 	else:
 		_draw_isochrones()
+	# Proposal (ghost) under the heading (solid) — two distinct layers (ADR 0036).
+	if _has_proposal():
+		_draw_plotted_course()
 	if _under_way():
 		_draw_course()
-	else:
-		_draw_plotted_course()
 	for body: BodyData in _system.bodies:
 		_draw_body(body, _to_screen(body.position))
 	for contact: ContactData in _system.contacts:
@@ -353,23 +354,36 @@ func _draw_course() -> void:
 	if String(order.get("type", "")) != "course":
 		return
 	# True scale → straight legs through the route's waypoints to the destination
-	# (ADR 0020/0027). Ship maps to the scope centre. Engaged → solid.
-	_draw_route(_course_route(order), 3.0, false)
+	# (ADR 0020/0027). Ship maps to the scope centre. Heading → solid (ADR 0036).
+	_draw_route(_course_route(order), 3.0, false, false)
 
 
-## The editable plotted course (compose route), coloured by obstruction (ADR 0028);
-## dashed until laid in, solid once committed; handles drawn fatter to grab.
+## The selection's proposed course — always ghosted (ADR 0036); dashed until laid in.
 func _draw_plotted_course() -> void:
 	if _preview_route.size() >= 2:
-		_draw_route(_preview_route, WAYPOINT_HANDLE_PX, not _route_laid_in)
+		_draw_route(_preview_route, WAYPOINT_HANDLE_PX, not _route_laid_in, true)
 
 
-## Draw a true-scale route (straight legs) coloured by its worst obstruction;
-## dashed for a plotted course, solid for a committed one (ADR 0028).
-func _draw_route(route: PackedVector2Array, handle_px: float, dashed: bool) -> void:
+## True while there is a proposal to draw, except when it coincides with the engaged
+## heading (no double-draw) — ADR 0036.
+func _has_proposal() -> bool:
+	if _preview_route.size() < 2:
+		return false
+	if not _under_way():
+		return true
+	var heading := _course_route(GameState.ship.current_order)
+	return _preview_route[_preview_route.size() - 1].distance_to(heading[heading.size() - 1]) > 1.0
+
+
+## Draw a true-scale route (straight legs) coloured by its worst obstruction; dashed
+## for a plotted course, solid for a committed one (ADR 0028). `ghost` dims it to mark
+## a proposal vs the solid heading (ADR 0036).
+func _draw_route(route: PackedVector2Array, handle_px: float, dashed: bool, ghost: bool) -> void:
 	if route.size() < 2:
 		return
 	var color := _route_color(route, Palette.ACCENT)
+	if ghost:
+		color = Color(color.r, color.g, color.b, 0.45)
 	var screen := PackedVector2Array()
 	for p: Vector2 in route:
 		screen.append(_to_screen(p))

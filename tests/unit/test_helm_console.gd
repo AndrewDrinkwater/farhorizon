@@ -122,11 +122,13 @@ func test_land_open_landing_opens_the_map_then_descends() -> void:
 	assert_eq(order.get("pos"), Vector2(30.0, 40.0), "descends to the picked point")
 
 
-func test_arrival_clears_the_plot() -> void:
+func test_arrival_keeps_the_selection_as_a_proposal() -> void:
+	# ADR 0036: the heading clears on arrival but the selection stays a proposal
+	# (ghost), never auto-engaged — it is not wiped.
 	EventBus.nav_target_selected.emit("verdant")
-	assert_ne(_helm._sel_kind, Travel.TargetKind.NONE, "a course is plotted")
+	assert_ne(_helm._sel_kind, Travel.TargetKind.NONE, "a target is selected")
 	EventBus.course_completed.emit()
-	assert_eq(_helm._sel_kind, Travel.TargetKind.NONE, "plot cleared on arrival")
+	assert_eq(_helm._sel_kind, Travel.TargetKind.BODY, "selection kept as a proposal on arrival")
 
 
 func test_clear_course_resets_selection_and_emits_clear() -> void:
