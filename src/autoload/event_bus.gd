@@ -12,11 +12,10 @@ extends Node
 signal sim_tick(tick: int)
 signal sim_speed_changed(speed: float)
 
-# --- Orders (ADR 0014): compose -> issue -> acknowledge -> execute / belay ---
+# --- Orders (ADR 0014): compose -> issue -> acknowledge -> execute ---
 signal order_issued(order: Dictionary)
 signal order_acknowledged(voice: String, line: String)
 signal order_rejected(reason: String)
-signal order_belayed()
 
 # --- Helm / Nav Plot (ADR 0013) — UI compose-time selection ---
 signal nav_target_selected(target_id: String)
@@ -64,6 +63,10 @@ signal ship_context_changed()
 signal contact_detected(contact_id: String)
 signal contact_lost(contact_id: String)
 signal contact_promoted(contact_id: String, tier: int)
+## A timed scan began / was interrupted (ADR 0017) — scanning is concurrent with
+## flight; completion is announced by contact_promoted.
+signal scan_started(contact_id: String, ticks_total: int)
+signal scan_interrupted(contact_id: String)
 
 # --- Zones (ADR 0026) — ship entered/left an authored region; a region's
 # on-enter trigger fired (for the future event system to consume). ---

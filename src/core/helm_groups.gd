@@ -5,7 +5,7 @@ extends RefCounted
 ## individual buttons via Travel.available within a visible cluster — so the rule
 ## for "what's even relevant here" lives in one place.
 ##
-## Clusters: Flight (lay in / engage / belay / all stop / clear), Docking (dock /
+## Clusters: Flight (lay in / engage / all stop / clear), Docking (dock /
 ## undock), Surface (land / take off / move), Sensors (scan / focus).
 
 ## context keys: location:int, location_can_dock:bool, landable_here:bool.

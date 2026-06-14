@@ -32,6 +32,15 @@ var base_ascent_ticks: int = 5
 var base_dock_ticks: int = 4
 var base_undock_ticks: int = 3
 
+## Sensor scan (ADR 0017): a timed, interruptible identify that runs concurrently
+## with flight (you can scan while moving). `base_scan_ticks` is the modifiable stat
+## (better sensors / crew lower it later); the active scan is the contact id + the
+## countdown, saved so a mid-scan save resumes.
+var base_scan_ticks: int = 5  # in-game minutes (one tick = one minute)
+var scan_contact_id: String = ""  # "" = not scanning
+var scan_ticks_left: int = 0
+var scan_ticks_total: int = 0
+
 
 func to_dict() -> Dictionary:
 	return {
@@ -52,6 +61,10 @@ func to_dict() -> Dictionary:
 		"base_ascent_ticks": base_ascent_ticks,
 		"base_dock_ticks": base_dock_ticks,
 		"base_undock_ticks": base_undock_ticks,
+		"base_scan_ticks": base_scan_ticks,
+		"scan_contact_id": scan_contact_id,
+		"scan_ticks_left": scan_ticks_left,
+		"scan_ticks_total": scan_ticks_total,
 	}
 
 
@@ -75,4 +88,8 @@ static func from_dict(data: Dictionary) -> ShipState:
 	s.base_ascent_ticks = int(data.get("base_ascent_ticks", s.base_ascent_ticks))
 	s.base_dock_ticks = int(data.get("base_dock_ticks", s.base_dock_ticks))
 	s.base_undock_ticks = int(data.get("base_undock_ticks", s.base_undock_ticks))
+	s.base_scan_ticks = int(data.get("base_scan_ticks", s.base_scan_ticks))
+	s.scan_contact_id = String(data.get("scan_contact_id", s.scan_contact_id))
+	s.scan_ticks_left = int(data.get("scan_ticks_left", s.scan_ticks_left))
+	s.scan_ticks_total = int(data.get("scan_ticks_total", s.scan_ticks_total))
 	return s

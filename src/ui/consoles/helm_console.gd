@@ -284,7 +284,7 @@ func _deck_sections() -> Array[Dictionary]:
 	return [
 		{"id": "flight", "header": "HELM_GRP_FLIGHT", "actions": [
 			["lay_in", "HELM_LAY_IN_COURSE", _lay_in_course], ["engage", "HELM_ENGAGE", _engage],
-			["belay", "HELM_BELAY", _belay], ["all_stop", "HELM_ALL_STOP", _all_stop],
+			["all_stop", "HELM_ALL_STOP", _all_stop],
 			["clear_course", "HELM_CLEAR_COURSE", _clear_route],
 		]},
 		{"id": "docking", "header": "HELM_GRP_DOCKING", "actions": [
@@ -877,10 +877,6 @@ func _engage() -> void:
 	EventBus.order_issued.emit({"type": "engage"})
 
 
-func _belay() -> void:
-	EventBus.order_belayed.emit()
-
-
 func _all_stop() -> void:
 	EventBus.order_issued.emit({"type": "all_stop"})
 
@@ -1007,6 +1003,7 @@ func _context() -> Dictionary:
 		"landable_here": location_body != null and location_body.landable,
 		"in_transition": _in_transition(),
 		"has_other_site": ship.location == Travel.Location.LANDED and _has_other_surface_site(location_body),
+		"scanning": ship.scan_contact_id != "",
 	}
 
 
@@ -1334,7 +1331,9 @@ func _ti_contact() -> void:
 	_ti_type.set_value(_contact_kind_label(contact.kind) if identified else tr("NAV_CONTACT_UNKNOWN"))
 	_set_route_dist_eta_rm()
 	var bits: Array[String] = [tr("HELM_TI_TIER_IDENTIFIED") if identified else tr("HELM_TI_TIER_BLIP")]
-	if not identified and GameState.ship.position.distance_to(contact.position) <= GameState.ship.sensor_range:
+	if GameState.ship.scan_contact_id == _sel_id:
+		bits.append(tr("HELM_TI_SCANNING").format({"mins": GameState.ship.scan_ticks_left}))
+	elif not identified and GameState.ship.position.distance_to(contact.position) <= GameState.ship.sensor_range:
 		bits.append(tr("HELM_TI_SCAN_READY"))
 	_ti_status.set_value(" · ".join(bits))
 

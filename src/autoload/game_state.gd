@@ -37,6 +37,9 @@ func load_system(system_data: SystemData) -> void:
 	ship.current_order = {}
 	ship.location = Travel.Location.DEEP_SPACE
 	ship.location_body_id = ""
+	ship.scan_contact_id = ""  # any in-progress scan ends with the old system's contacts
+	ship.scan_ticks_left = 0
+	ship.scan_ticks_total = 0
 	contacts = ContactsState.new()  # nothing discovered in the new system yet
 	zones = ZonesState.new()        # triggers re-arm in the new system
 

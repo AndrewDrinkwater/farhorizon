@@ -21,7 +21,6 @@ var _state: int = FlightCore.State.IDLE
 func _ready() -> void:
 	EventBus.sim_tick.connect(_on_sim_tick)
 	EventBus.order_issued.connect(_on_order_issued)
-	EventBus.order_belayed.connect(_on_belay)
 	EventBus.game_state_loaded.connect(_resync_after_load)
 	EventBus.system_changed.connect(_resync_after_load.unbind(1))  # reset motion for the new system
 	_resync_after_load()
@@ -153,7 +152,7 @@ func _engage() -> void:
 
 
 ## Clear the plotted course entirely (ADR 0028). Only when not under way — under
-## way the captain uses Belay / All Stop. No-op (quietly) if already clear/flying.
+## way the captain uses All Stop. No-op (quietly) if already clear/flying.
 func _clear_course() -> void:
 	if _is_under_way():
 		return
@@ -173,20 +172,6 @@ func _all_stop() -> void:
 	GameState.ship.location_body_id = ""
 	_set_state(FlightCore.State.IDLE)
 	_acknowledge("VOICE_SHIP_ALL_STOP")
-	_notify_context()
-
-
-## Belay = abort under way, but the course stays laid in so it can be re-engaged
-## (ADR 0005/0015). Drifts in open space.
-func _on_belay() -> void:
-	if not _is_under_way():
-		EventBus.order_rejected.emit("ORDER_REJECT_NOT_UNDERWAY")
-		return
-	GameState.ship.current_order["engaged"] = false
-	GameState.ship.location = Travel.Location.DEEP_SPACE
-	GameState.ship.location_body_id = ""
-	_set_state(FlightCore.State.IDLE)
-	_acknowledge("VOICE_SHIP_BELAYED")
 	_notify_context()
 
 
@@ -210,8 +195,10 @@ func _dock() -> void:
 	_notify_context()
 
 
-## Scan a contact to identify it (ADR 0017/0020): BLIP → IDENTIFIED. Legal only
-## within sensor range and while it's an un-identified contact.
+## Begin a timed scan of a contact (ADR 0017): BLIP → IDENTIFIED over base_scan_ticks
+## minutes. Runs concurrently with flight (you can scan while moving) and is checked
+## each tick (_tick_scan) — out of range interrupts it. Legal in range, on an
+## un-identified contact, when not already scanning.
 func _scan(order: Dictionary) -> void:
 	var contact_id := String(order.get("contact_id", ""))
 	var contact := _resolve_contact(contact_id)
@@ -224,10 +211,52 @@ func _scan(order: Dictionary) -> void:
 	if GameState.contacts.tier_of(contact_id) == Sensors.Tier.IDENTIFIED:
 		EventBus.order_rejected.emit("ORDER_REJECT_ALREADY_SCANNED")
 		return
+	if GameState.ship.scan_contact_id != "":
+		EventBus.order_rejected.emit("ORDER_REJECT_ALREADY_SCANNING")
+		return
+	var ticks := _scan_ticks()
+	GameState.ship.scan_contact_id = contact_id
+	GameState.ship.scan_ticks_total = ticks
+	GameState.ship.scan_ticks_left = ticks
+	EventBus.scan_started.emit(contact_id, ticks)
+	_acknowledge("VOICE_SHIP_SCANNING")
+	_notify_context()
+
+
+## Effective scan duration (in-game minutes). Just the base stat for now; better
+## sensors / crew lower it later (modifiable, like the landing/dock stats, ADR 0017).
+func _scan_ticks() -> int:
+	return maxi(1, GameState.ship.base_scan_ticks)
+
+
+## Advance an active scan one tick — concurrent with flight (ADR 0017). The contact
+## leaving sensor range (or winking out) interrupts it; reaching zero identifies it.
+func _tick_scan() -> void:
+	var contact_id := GameState.ship.scan_contact_id
+	if contact_id == "":
+		return
+	var contact := _resolve_contact(contact_id)
+	if contact == null \
+			or GameState.ship.position.distance_to(contact.position) > GameState.ship.sensor_range:
+		_clear_scan()
+		EventBus.scan_interrupted.emit(contact_id)
+		_acknowledge("VOICE_SHIP_SCAN_INTERRUPTED")
+		_notify_context()
+		return
+	GameState.ship.scan_ticks_left -= 1
+	if GameState.ship.scan_ticks_left > 0:
+		return
+	_clear_scan()
 	GameState.contacts.set_tier(contact_id, Sensors.Tier.IDENTIFIED)
 	EventBus.contact_promoted.emit(contact_id, Sensors.Tier.IDENTIFIED)
 	_acknowledge("VOICE_SHIP_SCAN_COMPLETE")
 	_notify_context()
+
+
+func _clear_scan() -> void:
+	GameState.ship.scan_contact_id = ""
+	GameState.ship.scan_ticks_left = 0
+	GameState.ship.scan_ticks_total = 0
 
 
 ## Undock back to the station's holding area — a timed manoeuvre (ADR 0033).
@@ -330,7 +359,7 @@ func _tick_transition(order: Dictionary) -> void:
 			GameState.ship.surface_site_id = ""
 			if body != null:
 				GameState.ship.position = body.position \
-					+ Vector2.from_angle(GameState.ship.orbit_angle) * Travel.holding_radius(body.radius)
+					+ Vector2.from_angle(GameState.ship.orbit_angle) * Travel.holding_radius(body)
 			GameState.ship.current_order = {}
 			_set_state(FlightCore.State.IDLE)
 			_acknowledge("VOICE_SHIP_AIRBORNE")
@@ -404,6 +433,7 @@ func _process(delta: float) -> void:
 
 
 func _on_sim_tick(_tick: int) -> void:
+	_tick_scan()  # scanning runs concurrently with flight/holding/docked (ADR 0017)
 	var order: Dictionary = GameState.ship.current_order
 	# Timed countdowns: descent/ascent + dock/undock (a surface move glides per-frame).
 	var ttype := String(order.get("type", ""))
@@ -427,7 +457,7 @@ func _on_sim_tick(_tick: int) -> void:
 		return
 	var center: Vector2 = body.position
 	var burn := int(order.get("burn", FlightMath.Burn.STANDARD))
-	var hold_radius := Travel.holding_radius(body.radius)
+	var hold_radius := Travel.holding_radius(body)
 	var prev_pos: Vector2 = GameState.ship.position
 
 	# Already at/inside the holding ring → settle into orbit.
@@ -493,25 +523,36 @@ func _route_length(order: Dictionary) -> float:
 ## ship drifts: stop on the point, drop the course, go IDLE in deep space (ADR 0020).
 func _step_to_point(order: Dictionary) -> void:
 	var dest: Vector2 = _destination(order)
+	# Hold ~500 m off a contact (ADR 0017); a free point we rest on exactly.
+	var hold := Travel.anomaly_hold_radius() if _resolve_contact(String(order.get("target_id", ""))) != null else 0.0
 	var burn := int(order.get("burn", FlightMath.Burn.STANDARD))
 	var prev_pos: Vector2 = GameState.ship.position
-	if FlightCore.has_arrived(prev_pos, dest):
-		_arrive_point(dest)
+	if prev_pos.distance_to(dest) <= hold or FlightCore.has_arrived(prev_pos, dest):
+		_arrive_point(dest, hold, prev_pos)
 		return
 	GameState.ship.heading = (dest - prev_pos).angle()
 	var new_pos: Vector2 = FlightCore.step_position(prev_pos, dest, burn)
+	if hold > 0.0 and new_pos.distance_to(dest) <= hold:
+		new_pos = dest + (prev_pos - dest).normalized() * hold  # stop on the near side
 	GameState.ship.position = new_pos
 	_spend_reaction_mass(FlightMath.rm_cost(prev_pos.distance_to(new_pos), burn))
-	if FlightCore.has_arrived(new_pos, dest):
-		_arrive_point(dest)
+	if new_pos.distance_to(dest) <= hold + 0.001 or FlightCore.has_arrived(new_pos, dest):
+		_arrive_point(dest, hold, prev_pos)
 	else:
 		var origin: Vector2 = order.get("origin", new_pos)
 		_set_state(FlightCore.executing_state(origin, dest, new_pos, burn))
 
 
-## Arrival at a contact / free point: rest on it and drift (no orbit, no body).
-func _arrive_point(dest: Vector2) -> void:
-	GameState.ship.position = dest
+## Arrival at a contact / free point: rest ~500 m off a contact (else on the point)
+## and drift (no orbit, no body).
+func _arrive_point(dest: Vector2, hold: float, approach_from: Vector2) -> void:
+	if hold > 0.0:
+		var dir := approach_from - dest
+		if dir.length() < 0.001:
+			dir = Vector2.from_angle(GameState.ship.heading + PI)
+		GameState.ship.position = dest + dir.normalized() * hold
+	else:
+		GameState.ship.position = dest
 	GameState.ship.location = Travel.Location.DEEP_SPACE
 	GameState.ship.location_body_id = ""
 	GameState.ship.current_order = {}
@@ -528,7 +569,7 @@ func _arrive(body: BodyData) -> void:
 	var to_ship: Vector2 = GameState.ship.position - center
 	if to_ship.length() < 0.001:
 		to_ship = Vector2.from_angle(GameState.ship.heading + PI)  # arrived dead-centre
-	GameState.ship.position = center + to_ship.normalized() * Travel.holding_radius(body.radius)
+	GameState.ship.position = center + to_ship.normalized() * Travel.holding_radius(body)
 	GameState.ship.orbit_angle = (GameState.ship.position - center).angle()
 	GameState.ship.location = Travel.Location.HOLDING
 	GameState.ship.location_body_id = body.id
@@ -548,7 +589,7 @@ func _advance_holding_orbit(seconds: float) -> void:
 	GameState.ship.orbit_angle = wrapf(
 		GameState.ship.orbit_angle + seconds * (TAU / ORBIT_PERIOD_SECONDS), 0.0, TAU)
 	var new_pos: Vector2 = body.position \
-		+ Vector2.from_angle(GameState.ship.orbit_angle) * Travel.holding_radius(body.radius)
+		+ Vector2.from_angle(GameState.ship.orbit_angle) * Travel.holding_radius(body)
 	GameState.ship.heading = (new_pos - GameState.ship.position).angle()  # tangent to the ring
 	GameState.ship.position = new_pos
 

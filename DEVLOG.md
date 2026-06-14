@@ -4,6 +4,42 @@ Session-by-session build history. Newest entries at the top.
 
 ---
 
+## 2026-06-13 — Timed concurrent scan + prominent sensor range (ADR 0037)
+
+Scanning anomalous readings is now a **timed, interruptible activity that runs while
+under way** (ADR 0037, amends the instant scan of ADR 0020). **214 GUT tests green;
+boots clean.**
+
+- **Scan model.** New `ShipState` scan fields (`scan_contact_id` / `scan_ticks_left`
+  / `scan_ticks_total`, saved) + a modifiable `base_scan_ticks` stat (default 5
+  in-game minutes). `FlightController` ticks the scan at the top of `_on_sim_tick`
+  concurrently with flight: start → countdown → BLIP→IDENTIFIED; leaving sensor range
+  (or the contact winking out) **interrupts** it (stays a BLIP). `Travel.available`
+  scan rule now allows scanning while moving, blocked only mid dock/land transition
+  or while another scan runs. New `scan_started` / `scan_interrupted` signals;
+  `load_system` clears any active scan. Target Info shows "scanning… Nm".
+- **Sensor range prominent.** The tactical scope draws the sensor radius as a bright
+  green "SENSOR RANGE" circle (the scope's headline) instead of the dim grey ring.
+- **Scope range ladder.** The scope zooms across five ranges — 15 AU · Sensor ·
+  5,000,000 km · 100,000 km · 1 km — with a left-edge slider showing them + the active
+  one (click a notch or scroll). The close scopes frame the immediate vicinity; the
+  two-state short/long zoom is replaced. Close-range **km scale rings** (1 km / 100 km /
+  10k km / 1M km) auto-appear at whichever scope reads them.
+- **Realistic holding distances** (`Travel.holding_radius(body)` now per-kind): hold
+  ~1 km off a station, ~500 m off an anomaly/contact, and orbit ~500 km up for an
+  Earth-sized planet (scaled by size). Tiny in wu — a sub-pixel gap at chart scale,
+  visible on the close scopes.
+- **Close-zoom crash fixed.** The dashed-line drawer looped over billion-pixel
+  segments at extreme zoom (infinite hang) and the sensor arc / filled markers drew at
+  enormous coords — guarded with a solid-line fallback, an arc cull, and off-scope
+  marker culling.
+- **Other:** orbit rings now only for gravimetric bodies (planets/moons) — stations
+  and the star no longer carry a ring. **Belay decommissioned** (redundant with All
+  Stop): removed from the Helm, `Travel`, `FlightController`, the `order_belayed`
+  signal, strings, and tests — All Stop is the single under-way stop now.
+
+---
+
 ## 2026-06-12 — Heading vs proposal separation (ADR 0036)
 
 Untangled three concepts the nav UI had blurred into "the course": the **heading**

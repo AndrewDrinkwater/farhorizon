@@ -17,6 +17,7 @@ const PICK_PX := 22.0
 const SCOPE_FILL := 0.42   # fraction of the half-min screen the sensor circle fills
 const SCOPE_MARGIN := 1.18 # show a little beyond sensor range
 const RING_COLOR := Color(0.35, 0.45, 0.58, 0.35)
+const SENSOR_RING_COLOR := Color(0.25, 0.95, 0.5, 0.9)  # bright green — the "Sensor Range" (ADR 0017)
 const SHIP_TINT := Color(0.9, 0.95, 1.0)
 const COURSE_NOGO_COLOR := Palette.STATUS_ALERT     # course crosses a no-go (ADR 0028)
 const COURSE_HAZARD_COLOR := Palette.STATUS_CAUTION  # course crosses a hazard
@@ -34,13 +35,20 @@ const ISOCHRONE_TICKS: Array[int] = [10, 20, 30, 60, 120]
 ## Range-ring radii in AU for the flat-distance mode (ADR 0021 toggle reuse).
 const DISTANCE_RING_AU: Array[float] = [1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 20.0]
 
+## Close-range scale rings (km), always drawn — each appears only at the scope where
+## it's a readable size, so the close scopes get 1 km / 100 km references (ADR 0017).
+const SCALE_RING_KM: Array[float] = [1.0, 100.0, 1.0e4, 1.0e6]
+
 ## What the concentric rings mean: ETA (isochrones, burn-aware) or flat distance.
 enum RingMode { ISOCHRONE, DISTANCE }
 
-## The scope is short-range sensors by default; scroll out once for a long-range
-## sweep capped at this radius (ADR 0017). Contacts still only resolve within actual
-## sensor range — long range just widens the chart.
+## Scope range ladder (ADR 0017): the scope zooms across discrete ranges from a
+## 15-AU sweep down to the immediate vicinity. The left-edge slider shows them and
+## which one is active; the wheel steps through. Contacts still only resolve within
+## actual sensor range — the close scopes just frame the area around the ship.
 const LONG_RANGE_AU: float = 15.0
+const KM_PER_AU: float = 149597870.7
+const SCOPE_SENSOR_INDEX: int = 1  # the default scope = the sensor range
 
 var _system: SystemData
 var _selected_id: String = ""
@@ -52,7 +60,8 @@ var _drag_wp: int = -1  # waypoint being dragged (ADR 0028), -1 = none
 var _drag_wps: PackedVector2Array = PackedVector2Array()
 var _center: Vector2
 var _view_rect: Rect2 = Rect2()  # plot region between the drawers (ADR 0035); empty = full viewport
-var _long_range: bool = false  # scrolled out to the long-range sweep (15 AU)
+var _range_index: int = SCOPE_SENSOR_INDEX  # index into _ranges (0 = widest)
+var _ranges: Array[Dictionary] = []  # {key, wu}; wu < 0 = use the live sensor range
 var _px_per_wu: float = 0.1
 var _burn: int = FlightMath.Burn.STANDARD  # mirrors the Helm burn selector (ADR 0019)
 var _ring_mode: int = RingMode.ISOCHRONE   # ETA rings ↔ distance rings (Helm toggle)
@@ -67,6 +76,7 @@ var _font: Font
 
 func build(system: SystemData) -> void:
 	_font = ThemeDB.fallback_font
+	_build_ranges()
 	EventBus.nav_target_selected.connect(_on_target_selected)
 	EventBus.nav_point_selected.connect(_on_point_selected)
 	EventBus.nav_burn_changed.connect(func(burn: int) -> void: _burn = burn)
@@ -105,7 +115,7 @@ func _init_system(system: SystemData) -> void:
 	_system = system
 	_selected_id = ""
 	_has_point_sel = false
-	_long_range = false  # back to short-range sensors on a new system
+	_range_index = SCOPE_SENSOR_INDEX  # back to the sensor-range scope on a new system
 	_ship_curr = GameState.ship.position
 	_ship_prev = _ship_curr
 	_tick_accum = 0.0
@@ -154,18 +164,40 @@ func _recompute() -> void:
 	var region := _region()
 	var vp := region.size
 	_center = region.position + vp * 0.5
-	# Short range fills the scope with the sensor circle; long range fits the 15-AU sweep.
-	var range_wu: float = LONG_RANGE_AU * Travel.WU_PER_AU if _long_range \
-		else maxf(1.0, GameState.ship.sensor_range * SCOPE_MARGIN)
-	_px_per_wu = (minf(vp.x, vp.y) * SCOPE_FILL) / range_wu
+	_px_per_wu = (minf(vp.x, vp.y) * SCOPE_FILL) / _range_wu()
 	_max_ring_px = minf(vp.x, vp.y) * 0.5 - 12.0  # keep a ring + its label on-screen
 
 
-## Scroll out (once) to long-range sensors / back in to short range (ADR 0017).
-func _set_long_range(long: bool) -> void:
-	if long == _long_range:
+## The scope range ladder, widest → narrowest (ADR 0017). wu < 0 = the live sensor
+## range. Built at runtime so it tracks WU_PER_AU.
+func _build_ranges() -> void:
+	_ranges = [
+		{"key": "SCOPE_R_LONG", "wu": LONG_RANGE_AU * Travel.WU_PER_AU},  # 15 AU sweep
+		{"key": "SCOPE_R_SENSOR", "wu": -1.0},                            # sensor range
+		{"key": "SCOPE_R_5M", "wu": _km_to_wu(5.0e6)},                    # 5,000,000 km
+		{"key": "SCOPE_R_100K", "wu": _km_to_wu(1.0e5)},                  # 100,000 km
+		{"key": "SCOPE_R_1KM", "wu": _km_to_wu(1.0)},                     # 1 km — immediate vicinity
+	]
+
+
+func _km_to_wu(km: float) -> float:
+	return km / KM_PER_AU * Travel.WU_PER_AU
+
+
+## The active scope range in wu (resolving the sensor-range sentinel).
+func _range_wu() -> float:
+	if _ranges.is_empty():
+		return maxf(1.0, GameState.ship.sensor_range * SCOPE_MARGIN)
+	var w: float = _ranges[_range_index]["wu"]
+	return maxf(1.0, GameState.ship.sensor_range * SCOPE_MARGIN) if w < 0.0 else w
+
+
+## Step the scope range (clamped). Lower index = wider; higher = closer.
+func _set_range_index(index: int) -> void:
+	var clamped := clampi(index, 0, _ranges.size() - 1)
+	if clamped == _range_index:
 		return
-	_long_range = long
+	_range_index = clamped
 	_recompute()
 	queue_redraw()
 
@@ -174,26 +206,58 @@ func _to_screen(real_pos: Vector2) -> Vector2:
 	return _center + (real_pos - _interp_ship()) * _px_per_wu
 
 
-## The 15-AU long-range boundary ring (ADR 0017) — a distinct dashed-feel accent ring
-## with an "15 AU" tag at the top, so the sweep limit reads on the scope.
-func _draw_range_limit() -> void:
-	var r := LONG_RANGE_AU * Travel.WU_PER_AU * _px_per_wu
-	draw_arc(_center, r, 0.0, TAU, 128, Color(Palette.ACCENT, 0.5), 1.5, true)
-	var text := tr("SCOPE_RANGE_LIMIT").format({"au": "%.0f" % LONG_RANGE_AU})
-	var sz := _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_SIZE)
-	draw_string(_font, _center + Vector2(-sz.x * 0.5, -r - 6.0), text,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_SIZE, Color(Palette.ACCENT, 0.8))
+## Is a screen point within the scope region (plus a label margin)? Cull off-scope
+## markers — at close ranges their coords are enormous and would collapse a filled
+## polygon to zero area (triangulation crash).
+func _on_scope(at: Vector2) -> bool:
+	return _region().grow(80.0).has_point(at)
 
 
-## A small range readout in the scope's top-right — which sensor range is active and
-## how to change it (scroll). Clear of the scale toggle (top-left) and toast (centre).
-func _draw_range_label() -> void:
+## The scope-range slider down the left edge (ADR 0017): a notch per range, widest at
+## top → closest at bottom, the active one lit; a title above. Click a notch (or the
+## wheel) to change scope. Drawn in the plot region's local space.
+func _draw_range_slider() -> void:
+	var geom := _slider_geometry()
+	var x: float = geom["x"]
+	draw_string(_font, Vector2(x - 6.0, geom["top"] - 14.0), tr("SCOPE_RANGE_TITLE"),
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Palette.TEXT_DIM)
+	draw_line(Vector2(x, geom["top"]), Vector2(x, geom["bottom"]), Color(Palette.TEXT_DIM, 0.5), 1.0)
+	for i in _ranges.size():
+		var y: float = geom["ys"][i]
+		var active := i == _range_index
+		var col := SENSOR_RING_COLOR if active else Color(Palette.TEXT_DIM, 0.8)
+		draw_line(Vector2(x - 5.0, y), Vector2(x + 5.0, y), col, 2.0 if active else 1.0)
+		if active:
+			draw_circle(Vector2(x, y), 5.0, SENSOR_RING_COLOR)
+		draw_string(_font, Vector2(x + 12.0, y + 4.0), tr(_ranges[i]["key"]),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, col)
+
+
+## Slider layout (local coords): x line, top/bottom, and the y of each notch.
+func _slider_geometry() -> Dictionary:
 	var region := _region()
-	var text := tr("SCOPE_RANGE_LONG").format({"au": "%.0f" % LONG_RANGE_AU}) if _long_range \
-		else tr("SCOPE_RANGE_SHORT")
-	var size := _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_SIZE)
-	var pos := Vector2(region.end.x - size.x - 16.0, region.position.y + 24.0)
-	draw_string(_font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_SIZE, Palette.STATUS_INFO)
+	var top := region.position.y + 44.0
+	var bottom := region.end.y - 44.0
+	var ys := PackedFloat32Array()
+	var n := _ranges.size()
+	for i in n:
+		ys.append(lerpf(top, bottom, float(i) / float(maxi(1, n - 1))))
+	return {"x": region.position.x + 22.0, "top": top, "bottom": bottom, "ys": ys}
+
+
+## Pick a range notch near the mouse (the slider band on the left), else -1.
+func _range_slider_pick(mouse: Vector2) -> int:
+	var geom := _slider_geometry()
+	if mouse.x < geom["x"] - 12.0 or mouse.x > geom["x"] + 90.0:
+		return -1
+	var best := -1
+	var best_d := 16.0
+	for i in _ranges.size():
+		var d: float = absf(mouse.y - geom["ys"][i])
+		if d < best_d:
+			best_d = d
+			best = i
+	return best
 
 
 # --- Draw ---
@@ -202,32 +266,43 @@ func _draw() -> void:
 	if _system == null:
 		return
 	_recompute()
-	# Sensor range ring (the real circle) + a half-range guide.
+	# Sensor range — a prominent bright-green circle (the headline of the scope) with a
+	# label + a faint half-range guide inside it. Drawn only when it fits the scope:
+	# at the close ranges you're far inside it, so it's off-screen (and a huge arc).
 	var radius := GameState.ship.sensor_range * _px_per_wu
-	draw_arc(_center, radius, 0.0, TAU, 96, RING_COLOR, 1.5, true)
-	draw_arc(_center, radius * 0.5, 0.0, TAU, 80, Color(RING_COLOR, 0.18), 1.0, true)
-	if _long_range:
-		_draw_range_limit()  # the 15-AU long-range boundary ring
-	_draw_range_label()
+	if radius <= _max_ring_px:
+		draw_arc(_center, radius * 0.5, 0.0, TAU, 80, Color(RING_COLOR, 0.18), 1.0, true)
+		draw_arc(_center, radius, 0.0, TAU, 128, SENSOR_RING_COLOR, 2.5, true)
+		var sensor_label := tr("SCOPE_SENSOR_RANGE")
+		var lsz := _font.get_string_size(sensor_label, HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_SIZE)
+		draw_string(_font, _center + Vector2(-lsz.x * 0.5, radius - 8.0), sensor_label,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, LABEL_SIZE, SENSOR_RING_COLOR)
+	_draw_range_slider()  # the scope-range ladder on the left (ADR 0017)
 
 	_draw_zones()  # beneath bodies/contacts (ADR 0026); true shapes at this scale
 	if _ring_mode == RingMode.DISTANCE:
 		_draw_distance_rings()
 	else:
 		_draw_isochrones()
+	_draw_scale_rings()  # close-range km references (1 km / 100 km on the close scopes)
 	# Proposal (ghost) under the heading (solid) — two distinct layers (ADR 0036).
 	if _has_proposal():
 		_draw_plotted_course()
 	if _under_way():
 		_draw_course()
 	for body: BodyData in _system.bodies:
-		_draw_body(body, _to_screen(body.position))
+		var bat := _to_screen(body.position)
+		if not _on_scope(bat):
+			continue  # off the (possibly very close) scope — cull (also avoids huge-coord polys)
+		_draw_body(body, bat)
 	for contact: ContactData in _system.contacts:
 		var tier := GameState.contacts.tier_of(contact.id)
 		if tier == Sensors.Tier.UNDETECTED:
 			continue
 		var identified := tier == Sensors.Tier.IDENTIFIED
 		var at := _to_screen(contact.position)
+		if not _on_scope(at):
+			continue
 		if contact.id == _selected_id:
 			draw_arc(at, CONTACT_PX + SELECT_GAP_PX, 0.0, TAU, 32, Palette.ACCENT, 1.5, true)
 		# Shape carries identity (ADR 0012): hollow = unscanned BLIP, filled = identified.
@@ -345,6 +420,26 @@ func _draw_distance_rings() -> void:
 		_label(at + Vector2(2.0, -2.0), tr("NAV_DISTANCE_AU").format({"au": _format_au(au)}), Palette.TEXT_DIM)
 
 
+## Close-range km scale rings — each shows only at the scope where it reads (so the
+## 1 km / 100 km close scopes get a scale), independent of the ETA/distance toggle.
+func _draw_scale_rings() -> void:
+	for km: float in SCALE_RING_KM:
+		var ring_px := _km_to_wu(km) * _px_per_wu
+		if ring_px < 6.0 or ring_px > _max_ring_px:
+			continue
+		draw_arc(_center, ring_px, 0.0, TAU, 96, Color(RING_COLOR, 0.5), 1.0, true)
+		var at := _center + Vector2(-0.7071, -0.7071) * ring_px  # up-left, off the distance labels
+		_label(at + Vector2(-2.0, -2.0), _km_label(km), Palette.TEXT_DIM)
+
+
+func _km_label(km: float) -> String:
+	if km >= 1.0e6:
+		return "%dM km" % int(round(km / 1.0e6))
+	if km >= 1.0e3:
+		return "%dk km" % int(round(km / 1.0e3))
+	return "%d km" % int(round(km))
+
+
 func _format_au(au: float) -> String:
 	return "%.0f" % au if au == floorf(au) else "%.1f" % au
 
@@ -404,6 +499,11 @@ func _draw_dashed(points: PackedVector2Array, color: Color) -> void:
 		var b := points[i + 1]
 		var seg := a.distance_to(b)
 		if seg < 0.001:
+			continue
+		# Guard against zoomed-in segments billions of px long (the dash loop would
+		# iterate effectively forever and hang): just draw them solid.
+		if seg > 20000.0:
+			draw_line(a, b, color, 1.5, true)
 			continue
 		var dir := (b - a) / seg
 		var pos := 0.0
@@ -503,14 +603,18 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-		_set_long_range(true)   # scroll out → long-range sweep (15 AU)
+		_set_range_index(_range_index - 1)  # scroll out → wider scope
 		return
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_WHEEL_UP:
-		_set_long_range(false)  # scroll in → short-range sensors
+		_set_range_index(_range_index + 1)  # scroll in → closer scope
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
+			var notch := _range_slider_pick(get_local_mouse_position())
+			if notch >= 0:
+				_set_range_index(notch)  # the range slider takes the click first
+				return
 			_on_left_press(get_local_mouse_position())
 		else:
 			_drag_wp = -1  # release ends any waypoint drag

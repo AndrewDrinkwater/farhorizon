@@ -290,7 +290,9 @@ func _draw() -> void:
 func _draw_rings(proj: Dictionary) -> void:
 	var hub := _view(_params.center)  # the star, under the zoom/pan transform (ADR 0023)
 	for body: BodyData in _system.bodies:
-		if body.kind == BodyData.Kind.STAR:
+		# Orbit rings are for gravimetric bodies only (planets + moons); the star is
+		# the hub and stations are artificial — no orbit ring for them.
+		if body.kind == BodyData.Kind.STAR or body.kind == BodyData.Kind.STATION:
 			continue
 		if body.kind == BodyData.Kind.MOON:
 			# Moon orbit ring: centred on the parent's projected point (ADR 0022).
@@ -541,6 +543,11 @@ func _draw_dashed(points: PackedVector2Array, color: Color) -> void:
 		var b := points[i + 1]
 		var seg := a.distance_to(b)
 		if seg < 0.001:
+			continue
+		# A zoomed-in segment can be billions of px long — the dash loop would hang.
+		# Draw those solid instead.
+		if seg > 20000.0:
+			draw_line(a, b, color, 1.5, true)
 			continue
 		var dir := (b - a) / seg
 		var pos := 0.0

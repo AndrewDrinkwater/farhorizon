@@ -38,12 +38,10 @@ func test_engage_needs_course_not_under_way_not_docked() -> void:
 		"docked -> must undock first")
 
 
-func test_belay_and_all_stop_only_under_way() -> void:
+func test_all_stop_only_under_way() -> void:
 	var underway := Travel.available(_ctx({"in_transit": true}))
-	assert_true(underway["belay"])
 	assert_true(underway["all_stop"])
 	var idle := Travel.available(_ctx({}))
-	assert_false(idle["belay"])
 	assert_false(idle["all_stop"])
 
 
@@ -69,7 +67,7 @@ func test_lay_in_allowed_for_a_free_point_with_no_id() -> void:
 		"nothing selected -> cannot")
 
 
-func test_scan_needs_a_contact_in_range_at_blip_not_under_way() -> void:
+func test_scan_needs_an_in_range_blip_and_runs_while_moving() -> void:
 	var ok := _ctx({
 		"nav_target_is_contact": true, "nav_target_in_range": true,
 		"nav_target_tier": Sensors.Tier.BLIP,
@@ -79,8 +77,12 @@ func test_scan_needs_a_contact_in_range_at_blip_not_under_way() -> void:
 		"out of range -> cannot scan")
 	assert_false(Travel.available(_merge(ok, {"nav_target_tier": Sensors.Tier.IDENTIFIED}))["scan"],
 		"already identified -> cannot scan")
-	assert_false(Travel.available(_merge(ok, {"in_transit": true}))["scan"],
-		"under way -> cannot scan")
+	assert_true(Travel.available(_merge(ok, {"in_transit": true}))["scan"],
+		"under way -> CAN scan (ADR 0017: concurrent with flight)")
+	assert_false(Travel.available(_merge(ok, {"scanning": true}))["scan"],
+		"already scanning -> cannot start another")
+	assert_false(Travel.available(_merge(ok, {"in_transition": true}))["scan"],
+		"mid dock/land transition -> cannot scan")
 	assert_false(Travel.available(_ctx({"nav_target_is_contact": false}))["scan"],
 		"not a contact -> no scan")
 

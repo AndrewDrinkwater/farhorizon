@@ -1,6 +1,6 @@
 extends GutTest
 ## FlightController travel pipeline (ADR 0015): lay-in → engage → fly → hold, plus
-## dock/undock, belay, all-stop, and load-resume. Runs against the live
+## dock/undock, all-stop, and load-resume. Runs against the live
 ## GameState/TypeRegistry/EventBus; snapshots GameState so it leaves no trace.
 
 var _snapshot: Dictionary
@@ -72,7 +72,7 @@ func test_engage_then_fly_into_holding() -> void:
 	assert_eq(GameState.ship.current_order, {}, "course consumed on arrival")
 	assert_eq(_fc.get_state(), FlightCore.State.IDLE, "motion idle once arrived")
 	assert_almost_eq(GameState.ship.position.distance_to(verdant.position),
-		Travel.holding_radius(verdant.radius), 1.0, "holds on the orbit ring, not the body centre")
+		Travel.holding_radius(verdant), 1.0, "holds on the orbit ring, not the body centre")
 
 
 func test_holding_orbit_advances_on_the_ring() -> void:
@@ -82,7 +82,7 @@ func test_holding_orbit_advances_on_the_ring() -> void:
 	_fc._advance_holding_orbit(2.0)  # 2 (speed-scaled) seconds of orbit
 	var p2: Vector2 = GameState.ship.position
 	assert_ne(p1, p2, "the ship moves along its orbit over time")
-	assert_almost_eq(p2.distance_to(verdant.position), Travel.holding_radius(verdant.radius), 0.5,
+	assert_almost_eq(p2.distance_to(verdant.position), Travel.holding_radius(verdant), 0.5,
 		"orbit stays on the holding ring")
 	assert_eq(GameState.ship.location, Travel.Location.HOLDING, "still holding")
 
@@ -97,20 +97,7 @@ func test_departing_orbit_leaves_from_the_ring_not_the_centre() -> void:
 	assert_eq(GameState.ship.location, Travel.Location.DEEP_SPACE, "departed")
 	assert_eq(GameState.ship.current_order.get("origin"), hold_pos, "course starts from the orbit point")
 	assert_almost_eq(GameState.ship.position.distance_to(verdant.position),
-		Travel.holding_radius(verdant.radius), 1.0, "did not jump to the body centre")
-
-
-func test_belay_keeps_course_for_re_engage() -> void:
-	EventBus.order_issued.emit({"type": "set_course", "target_id": "rubicon", "burn": FlightMath.Burn.STANDARD})
-	EventBus.order_issued.emit({"type": "engage"})
-	EventBus.sim_tick.emit(1)
-	var pos := GameState.ship.position
-	EventBus.order_belayed.emit()
-	assert_false(GameState.ship.current_order.get("engaged"), "no longer under way")
-	assert_eq(GameState.ship.current_order.get("target_id"), "rubicon", "course stays laid in")
-	assert_eq(GameState.ship.location, Travel.Location.DEEP_SPACE, "drifting in open space")
-	EventBus.sim_tick.emit(2)
-	assert_eq(GameState.ship.position, pos, "belayed ship holds position")
+		Travel.holding_radius(verdant), 1.0, "did not jump to the body centre")
 
 
 func test_all_stop_drops_the_course() -> void:
@@ -238,14 +225,35 @@ func test_course_to_an_undetected_contact_is_rejected() -> void:
 	assert_eq(GameState.ship.current_order, {}, "no course stored")
 
 
-func test_scan_in_range_identifies_a_contact() -> void:
+func test_scan_identifies_after_its_timed_duration() -> void:
+	# ADR 0017: scan is timed, not instant — identifies only after base_scan_ticks.
 	var kepri := _contact("kepri_derelict")
 	GameState.contacts.set_tier("kepri_derelict", Sensors.Tier.BLIP)
 	GameState.ship.position = kepri.position  # right on top of it -> in range
+	GameState.ship.base_scan_ticks = 3
 	watch_signals(EventBus)
 	EventBus.order_issued.emit({"type": "scan", "contact_id": "kepri_derelict"})
-	assert_eq(GameState.contacts.tier_of("kepri_derelict"), Sensors.Tier.IDENTIFIED, "scan identifies")
+	assert_signal_emitted(EventBus, "scan_started", "scan begins")
+	assert_eq(GameState.contacts.tier_of("kepri_derelict"), Sensors.Tier.BLIP, "not identified until it completes")
+	for i in range(3):
+		EventBus.sim_tick.emit(i + 1)
+	assert_eq(GameState.contacts.tier_of("kepri_derelict"), Sensors.Tier.IDENTIFIED, "identified after its duration")
 	assert_signal_emitted(EventBus, "contact_promoted", "promotion announced")
+
+
+func test_scan_interrupted_when_the_contact_leaves_range() -> void:
+	var kepri := _contact("kepri_derelict")
+	GameState.contacts.set_tier("kepri_derelict", Sensors.Tier.BLIP)
+	GameState.ship.position = kepri.position
+	GameState.ship.base_scan_ticks = 5
+	EventBus.order_issued.emit({"type": "scan", "contact_id": "kepri_derelict"})
+	EventBus.sim_tick.emit(1)  # one tick of progress
+	GameState.ship.position = kepri.position + Vector2(GameState.ship.sensor_range + 1000.0, 0.0)
+	watch_signals(EventBus)
+	EventBus.sim_tick.emit(2)  # now out of range -> interrupted
+	assert_signal_emitted(EventBus, "scan_interrupted", "leaving range interrupts the scan")
+	assert_eq(GameState.contacts.tier_of("kepri_derelict"), Sensors.Tier.BLIP, "stays a blip")
+	assert_eq(GameState.ship.scan_contact_id, "", "scan cleared")
 
 
 func test_scan_out_of_range_is_rejected() -> void:
@@ -306,7 +314,7 @@ func _hold_at(body_id: String) -> void:
 	var b := _find(body_id)
 	GameState.ship.location = Travel.Location.HOLDING
 	GameState.ship.location_body_id = body_id
-	GameState.ship.position = b.position + Vector2(Travel.holding_radius(b.radius), 0.0)
+	GameState.ship.position = b.position + Vector2(Travel.holding_radius(b), 0.0)
 
 
 func test_land_then_take_off() -> void:
